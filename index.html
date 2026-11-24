@@ -1080,7 +1080,7 @@ function sincronizarPainel() {
     .withFailureHandler(function(erro) {
       console.error('Erro ao sincronizar:', erro);
       sincronizandoPainel = false;
-      toast('Erro ao carregar tarefas da planilha');
+      toast('Erro ao carregar tarefas: ' + (erro.message || String(erro)));
     })
     .listarTarefas();
 }
@@ -1162,6 +1162,11 @@ function carregarEstruturaPainel() {
       if (quadroAtivoId && !quadrosPainel.some(q=>q.id === quadroAtivoId)) quadroAtivoId = null;
       desenharVisaoQuadros();
       if (quadroAtivoId) drawP();
+      sincronizarPainel();
+      if (dados.migracao && dados.migracao.avisos && dados.migracao.avisos.length) {
+        console.warn('Avisos de migração:', dados.migracao.avisos);
+        toast('Algumas tarefas antigas não foram importadas. Consulte os registros do Apps Script.');
+      }
     })
     .withFailureHandler(e => toast("Erro ao carregar quadros: " + (e.message || e)))
     .estruturaPainel();
@@ -1527,9 +1532,7 @@ if (location.hash.slice(1)) {
 
 show();
 
-// Primeira leitura do Google Sheets
-sincronizarPainel();
-
+// A primeira leitura acontece após carregar a estrutura dos quadros.
 // Consulta novas tarefas a cada 10 segundos
 setInterval(sincronizarPainel, 10000);
 
