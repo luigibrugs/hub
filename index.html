@@ -237,6 +237,64 @@ body.dark .theme-toggle-icon-container { transform: translateX(24px); color: #00
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 
+
+/* ===== Área de espaços e quadros ===== */
+#painel { padding-left:280px; }
+#painel::after { display:none; }
+#painel.p-overview {
+  color:#002233;
+  background:radial-gradient(circle at 94% 4%,rgba(0,219,255,.12),transparent 34%),#f2f8fb;
+}
+#painel.p-overview h1 {color:#002233}
+#painel.p-overview .ptop {color:#002233}
+#painel.p-overview .pi {color:#002233}
+#painel.p-overview .pr .pav2 {background:#d4eff5;color:#002233}
+#painel.p-overview .plogo {color:#002233}
+#painel.p-overview .plogo svg {fill:#008aa4;stroke:#008aa4}
+#painel.p-overview #pdetalhe {display:none}
+#painel:not(.p-overview) #pvisao {display:none}
+#painel .rail {width:280px;align-items:stretch;gap:7px;padding:25px 15px;background:#002233;overflow-y:auto}
+#painel .rail .rbrand {font-size:26px;color:white;font-weight:800;display:flex;align-items:center;gap:12px;padding:3px 12px 34px}
+#painel .rail a,#painel .rail button {height:auto;min-height:48px;width:100%;display:flex;justify-content:flex-start;gap:12px;padding:11px 14px;text-align:left;font:inherit;font-size:14px;line-height:1.35;border-radius:12px}
+#painel .rail .on {background:rgba(0,219,255,.16);box-shadow:none}
+#painel .rail a svg,#painel .rail button svg {flex:none}
+#painel .rail .rsection {margin:16px 8px 0;color:#00DBFF;font-size:11px;letter-spacing:.12em;text-transform:uppercase}
+#painel .rail .rsub {padding-left:25px}
+#painel .rail .rav {margin:26px 0 0 9px;flex:none}
+#painel .ptop {padding:22px 36px 0}
+.p-overview-title {padding:16px 36px 16px}
+.p-overview-title h2 {font-size:26px;font-weight:800;margin:0}
+.p-overview-title p {color:#648091;font-size:14px;margin:8px 0 0}
+.p-spaces {padding:0 36px 64px}
+.p-space {margin:12px 0 32px}
+.p-spacehead {font-size:22px;font-weight:800;color:#002233;margin:0 0 16px;padding-bottom:12px;border-bottom:1px solid #d8e6ee}
+.p-fixed {font-size:11px;background:#d8f8fc;color:#00899e;padding:5px 9px;border-radius:30px;vertical-align:middle;margin-left:10px;white-space:nowrap}
+.p-boardgrid {display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:20px;max-width:1160px}
+.p-boardcard,.p-create {cursor:pointer;border:1px solid #e4edf2;border-radius:17px;box-shadow:0 8px 22px rgba(0,32,48,.08);background:white;text-align:left;overflow:hidden;font:inherit;transition:transform .18s,box-shadow .18s;min-height:146px;color:#002233}
+.p-boardcard:hover,.p-create:hover {transform:translateY(-3px);box-shadow:0 12px 26px rgba(0,32,48,.14)}
+.p-cover {height:93px;background:linear-gradient(180deg,var(--bcolor),#002233);padding:11px}
+.p-cover span {font-size:12px;font-weight:700;color:white;background:rgba(0,0,0,.37);border-radius:30px;padding:4px 10px}
+.p-bname {font-size:15px;font-weight:800;padding:15px}
+.p-create {display:grid;place-content:center;gap:6px;text-align:center;color:#648091;font-weight:700}
+.p-create strong {font-size:34px;font-weight:400}
+.p-spaceadd {margin:14px 0 30px;background:white;border:1px solid #e4edf2;padding:12px 20px;border-radius:13px;color:#002233;cursor:pointer;font-weight:700}
+.p-sync {background:white;border:1px solid #deebf1;color:#002233;border-radius:20px;padding:12px 17px;font:inherit;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 5px 12px rgba(0,0,0,.05)}
+.p-sync:disabled {opacity:.6}
+.p-boardback {background:none;border:1px solid rgba(0,219,255,.3);color:#00DBFF;border-radius:12px;padding:10px 14px;cursor:pointer;font:inherit}
+#painel #pdetalhe .phead {margin-top:28px}
+@media(max-width:800px) {
+ #painel {padding-left:70px}
+ #painel .rail {width:70px;padding:16px 8px}
+ #painel .rail .rbrand {font-size:0;padding:12px 3px}
+ #painel .rail a,#painel .rail button {font-size:0;justify-content:center;padding:10px}
+ #painel .rail a svg,#painel .rail button svg {width:24px}
+ #painel .rail .rsection,#painel .rail .rav {display:none}
+ #painel .rail .rsub {padding-left:0}
+ .p-overview-title,.p-spaces {padding-left:18px;padding-right:18px}
+ #painel .ptop {padding:16px}
+ .p-boardgrid {grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
+}
+
 /* ===== TOTVS PAINEL ===== */
 body.pn { overflow: hidden; }
 body.pn aside, body.pn main { display: none; }
@@ -900,6 +958,11 @@ let pmode = "kan";
 let drag = null;
 let ed = null;
 let sincronizandoPainel = false;
+let espacosPainel = [];
+let quadrosPainel = [];
+let quadroAtivoId = null;
+let painelSalvando = false;
+
 
 const pSave = () => {};
 
@@ -943,7 +1006,8 @@ function sincronizarPainel() {
         chk: []
       }));
 
-      drawP();
+      if (quadroAtivoId) drawP();
+      else desenharVisaoQuadros();
       sincronizandoPainel = false;
     })
     .withFailureHandler(function(erro) {
@@ -959,39 +1023,170 @@ const avs = w => `<span class="avs">${w.map(x => `<span class="pav" style="backg
 const tk = (t, i) => `<div class="task" draggable="true" data-id="${t.id}" style="--bar:${col(t.col)[2]};animation-delay:${i * 40}ms"><div class="tt">${esc(t.t)}</div><div class="tm">${chip(t.tag)}${t.chk.length ? `<span class="cb">${t.chk.filter(c => c.d).length}/${t.chk.length} itens</span>` : ""}${avs(t.who)}</div></div>`;
 
 $("#painel").innerHTML = `
-  <div class="rail" id="rail"></div>
+  <nav class="rail" id="rail"></nav>
   <header class="ptop">
-    <div class="plogo"><svg viewBox="0 0 24 24" width="38" height="38" fill="#00DBFF" stroke="#00DBFF" stroke-width="2" stroke-linejoin="round"><path d="M12 2l8.5 5v10L12 22l-8.5-5V7z"/></svg>TOTVS</div>
-    <div class="pr"><button class="pi" data-soon aria-label="Pesquisar">${ic("search")}</button><button class="pi bd" data-soon aria-label="Notificações">${ic("bell")}</button><div class="pav2">FU</div></div>
+    <div class="plogo">ALPHA</div>
+    <div class="pr"><button class="p-sync" id="psync">⟳ Sincronizar planilha</button><div class="pav2">AP</div></div>
   </header>
-  <div class="phead">
-    <div class="ptile">${ic("board")}</div>
-    <div><h1 id="ptitle" contenteditable spellcheck="false" title="Clique para renomear">TOTVS Painel</h1><div class="psub">ALPHA · GOVERNANÇA CORPORATIVA</div></div>
-    <div class="pact"><div class="seg"><button class="on" data-mode="kan" aria-label="Quadro">${ic("board")}</button><button data-mode="list" aria-label="Lista">${ic("list")}</button><button data-mode="cal" aria-label="Calendário">${ic("cal")}</button></div><button class="newt" id="newt">+ Nova tarefa</button></div>
-  </div>
-  <div class="cols" id="cols"></div>`;
+  <section id="pvisao">
+    <div class="p-overview-title"><h1>Painel <span style="color:#00bcd4">TOTVS</span></h1><p>Selecione um quadro existente ou crie novos quadros e ambientes por área.</p></div>
+    <div class="p-spaces" id="pespacos"></div>
+  </section>
+  <section id="pdetalhe">
+    <div class="phead">
+      <button type="button" class="p-boardback" id="pvoltar">← Todos os quadros</button>
+      <div><h1 id="ptitle">Quadro</h1><div class="psub">ALPHA · NÚCLEO DE APRENDIZAGEM</div></div>
+      <div class="pact"><div class="seg"><button class="on" data-mode="kan" aria-label="Quadro">${ic("board")}</button><button data-mode="list" aria-label="Lista">${ic("list")}</button><button data-mode="cal" aria-label="Calendário">${ic("cal")}</button></div><button class="newt" id="newt">+ Nova tarefa</button></div>
+    </div>
+    <div class="cols" id="cols"></div>
+  </section>`;
 
-$("#rail").innerHTML = [["a", "#home", "home", "Início ALPHA"], ["a", "#adm", "folder", "Administrativo"], ["a", "#gov", "shield", "Governança Corporativa"], ["a", "#hosp", "layers", "Hospitalidade Executiva"], ["a", "#viagem", "plane", "Checklist de Viagem"], ["a", "#evento", "cal", "Checklist de Eventos"], ["l", "zendesk", "headset", "Facilities (Zendesk)"], ["a", "#painel", "board", "TOTVS Painel", 1], ["s", "", "chart", "Indicadores"], ["s", "", "gear", "Configurações"]]
-  .map(([t, h, i, l, on]) => t === "a" ? `<a href="${h}" title="${l}" class="${on ? "on" : ""}">${ic(i)}</a>` : `<button title="${l}" ${t === "l" ? `data-link="${h}"` : "data-soon"}>${ic(i)}</button>`).join("") + '<div class="rav">FU</div>';
+$("#rail").innerHTML = `
+  <div class="rbrand">⬡ ALPHA</div>
+  <a href="#home">${ic("home")} Início</a>
+  <a href="#adm">${ic("folder")} Administrativo</a>
+  <a href="#gov">${ic("shield")} Governança Corporativa</a>
+  <a href="#hosp">${ic("brief")} Hospitalidade Executiva</a>
+  <div class="rsection">Núcleo de Aprendizagem</div>
+  <button type="button" class="on" data-overview>${ic("board")} Painel TOTVS</button>
+  <div class="rsub" id="rquadros"></div>
+  <div class="rav">AP</div>
+`;
+
+function desenharVisaoQuadros() {
+  const alvo = $("#pespacos");
+  if (!alvo) return;
+  $("#painel").classList.toggle("p-overview", !quadroAtivoId);
+  alvo.innerHTML = espacosPainel.map(espaco => {
+    const quadros = quadrosPainel.filter(q => q.espacoId === espaco.id);
+    return `<section class="p-space"><h2 class="p-spacehead">${esc(espaco.nome)}${espaco.fixo ? '<span class="p-fixed">♙ Área fixa</span>' : ""}</h2>
+      <div class="p-boardgrid">
+        <button type="button" class="p-create" data-create-board="${esc(espaco.id)}"><strong>＋</strong>Criar quadro</button>
+        ${quadros.map(q => `<button class="p-boardcard" type="button" data-board="${esc(q.id)}"><div class="p-cover" style="--bcolor:${esc(q.cor)}"><span>${T.filter(t => (t.quadroId || "quadro-administrativo") === q.id).length} cards</span></div><div class="p-bname">${esc(q.nome)}</div></button>`).join("")}
+      </div></section>`;
+  }).join("") + '<button type="button" class="p-spaceadd" data-create-space>＋ Criar espaço</button>';
+
+  $("#rquadros").innerHTML = quadrosPainel.filter(q=>q.espacoId === "nucleo-aprendizagem").map(q =>
+    `<button type="button" data-board="${esc(q.id)}">${ic("board")} ${esc(q.nome)}</button>`
+  ).join("");
+}
+function abrirVisaoQuadros() {
+  quadroAtivoId = null;
+  desenharVisaoQuadros();
+}
+function abrirQuadro(id) {
+  const quadro = quadrosPainel.find(q => q.id === id);
+  if (!quadro) return toast("Quadro não encontrado");
+  quadroAtivoId = id;
+  $("#painel").classList.remove("p-overview");
+  $("#ptitle").textContent = quadro.nome;
+  pmode = "kan";
+  P.querySelectorAll("[data-mode]").forEach(b => b.classList.toggle("on", b.dataset.mode === "kan"));
+  drawP();
+}
+function carregarEstruturaPainel() {
+  google.script.run
+    .withSuccessHandler(function(dados) {
+      espacosPainel = dados.espacos || [];
+      quadrosPainel = dados.quadros || [];
+      if (quadroAtivoId && !quadrosPainel.some(q=>q.id === quadroAtivoId)) quadroAtivoId = null;
+      desenharVisaoQuadros();
+      if (quadroAtivoId) drawP();
+    })
+    .withFailureHandler(e => toast("Erro ao carregar quadros: " + (e.message || e)))
+    .estruturaPainel();
+}
+function sincronizarTudo(manual) {
+  const btn=$("#psync");
+  if(btn) btn.disabled = true;
+  google.script.run.withSuccessHandler(function(dados) {
+    espacosPainel = dados.espacos || [];
+    quadrosPainel = dados.quadros || [];
+    desenharVisaoQuadros();
+    sincronizarPainel();
+    if (manual) toast("Planilha sincronizada!");
+    if (btn) btn.disabled = false;
+  }).withFailureHandler(function(e) {
+    if (btn) btn.disabled = false;
+    toast("Erro na sincronização: "+(e.message||e));
+  }).estruturaPainel();
+}
+function solicitarEspaco() {
+  if (painelSalvando) return;
+  const nome=prompt("Nome do novo espaço:");
+  if (nome===null) return;
+  if (!nome.trim()) return toast("Informe um nome");
+  painelSalvando=true;
+  google.script.run.withSuccessHandler(function(){
+    painelSalvando=false; sincronizarTudo();
+    toast("Espaço criado!");
+  }).withFailureHandler(function(e){
+    painelSalvando=false; toast("Erro: "+(e.message||e));
+  }).criarEspaco(nome.trim());
+}
+function solicitarQuadro(espacoId) {
+  if (painelSalvando) return;
+  const nome=prompt("Nome do novo quadro:");
+  if (nome===null) return;
+  if (!nome.trim()) return toast("Informe um nome");
+  painelSalvando=true;
+  const cores=["#00b6ce","#8155df","#02c4d4","#cd20a0","#13a889","#ef8e4a"];
+  const cor=cores[quadrosPainel.length % cores.length];
+  google.script.run.withSuccessHandler(function(quadro){
+    painelSalvando=false; sincronizarTudo();
+    abrirQuadroLocalAposCriar(quadro);
+  }).withFailureHandler(function(e){
+    painelSalvando=false; toast("Erro: "+(e.message||e));
+  }).criarQuadro({nome:nome.trim(),espacoId,cor});
+}
+function abrirQuadroLocalAposCriar(quadro) {
+  quadrosPainel.push(quadro);
+  abrirQuadro(quadro.id);
+  toast("Quadro criado!");
+}
+function solicitarTarefa() {
+  if (!quadroAtivoId || painelSalvando) return;
+  const titulo=prompt("Título da nova tarefa:");
+  if(titulo===null) return;
+  if(!titulo.trim()) return toast("Informe um título");
+  painelSalvando=true;
+  google.script.run.withSuccessHandler(function(){
+    painelSalvando=false;
+    sincronizarPainel();
+    toast("Tarefa criada no quadro!");
+  }).withFailureHandler(function(e){
+    painelSalvando=false;
+    toast("Erro: "+(e.message||e));
+  }).criarTarefa({titulo:titulo.trim(),quadroId:quadroAtivoId});
+}
 
 function drawP() {
+  if (!quadroAtivoId) return;
+  const visiveis = T.filter(t => (t.quadroId || "quadro-administrativo") === quadroAtivoId);
   const c = $("#cols");
   if (pmode === "list") {
     c.className = "plist";
-    c.innerHTML = T.map(t => `<div class="lr" data-id="${t.id}"><span class="dot" style="background:${col(t.col)[2]}"></span><b>${esc(t.t)}</b>${chip(t.tag)}${avs(t.who)}<em>${col(t.col)[1]}</em></div>`).join("") || "<p>Nenhuma tarefa ainda.</p>";
+    c.innerHTML = visiveis.map(t => `<div class="lr" data-id="${t.id}"><span class="dot" style="background:${col(t.col)[2]}"></span><b>${esc(t.t)}</b>${chip(t.tag)}${avs(t.who)}<em>${col(t.col)[1]}</em></div>`).join("") || "<p>Nenhuma tarefa ainda.</p>";
     return;
   }
   c.className = "cols";
   c.innerHTML = COLS.map(([k, n, cl, ico]) => {
-    const L = T.filter(t => t.col === k);
+    const L = visiveis.filter(t => t.col === k);
     return `<div class="col" data-c="${k}"><div class="colh"><svg viewBox="0 0 24 24" style="stroke:${cl}">${ico}</svg><span>${n}</span><i>${L.length}</i></div>${L.map(tk).join("")}<button class="add" data-add="${k}">+ Adicionar tarefa</button></div>`;
   }).join("");
 }
 
 const P = $("#painel");
 P.addEventListener("click", e => {
-  const a = e.target.closest("[data-add]"); if (a) return openT(null, a.dataset.add);
-  if (e.target.closest("#newt")) return openT(null, "backlog");
+  const quadroBtn = e.target.closest("[data-board]");
+  if (quadroBtn) return abrirQuadro(quadroBtn.dataset.board);
+  const createBoard = e.target.closest("[data-create-board]");
+  if (createBoard) return solicitarQuadro(createBoard.dataset.createBoard);
+  if (e.target.closest("[data-create-space]")) return solicitarEspaco();
+  if (e.target.closest("[data-overview]") || e.target.closest("#pvoltar")) return abrirVisaoQuadros();
+  if (e.target.closest("#psync")) return sincronizarTudo(true);
+  const a = e.target.closest("[data-add]"); if (a) return solicitarTarefa();
+  if (e.target.closest("#newt")) return solicitarTarefa();
   const m = e.target.closest("[data-mode]");
   if (m) { if (m.dataset.mode === "cal") return toast("Calendário em breve"); pmode = m.dataset.mode; P.querySelectorAll("[data-mode]").forEach(b => b.classList.toggle("on", b === m)); return drawP(); }
   if (e.target.closest("[data-soon]")) return toast("Em breve");
@@ -1040,11 +1235,6 @@ P.addEventListener("drop", e => {
     })
     .atualizarStatus(id, novoStatus);
 });
-
-const pt = $("#ptitle");
-pt.textContent = store.get("hv_painel_t", "TOTVS Painel");
-pt.onblur = () => store.set("hv_painel_t", pt.textContent.trim() || "TOTVS Painel");
-pt.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); pt.blur(); } };
 
 const RESPONSAVEIS_FIXOS = [
   "Luiz Carlos",
@@ -1189,7 +1379,8 @@ $("#pm").onclick = e => { if (e.target.id === "pm") closeP(); };
 addEventListener("keydown", e => { if (e.key === "Escape") { closeMod(); closeP(); $("#srDrop").classList.remove("open"); } });
 
 
-drawP();
+abrirVisaoQuadros();
+carregarEstruturaPainel();
 
 if (location.hash.slice(1)) {
   currentRoute = location.hash.slice(1);
