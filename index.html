@@ -1103,8 +1103,8 @@ $("#painel").innerHTML = `
   <section id="pdetalhe">
     <div class="phead">
       <button type="button" class="p-boardback" id="pvoltar">← Todos os quadros</button>
-      <div><h1 id="ptitle">Quadro</h1><div class="psub">ALPHA · NÚCLEO DE APRENDIZAGEM</div></div>
-      <div class="pact"><button type="button" class="p-boardback" id="pconfigsheet" title="Vincular Google Sheets">⚙ Planilha do quadro</button><div class="seg"><button class="on" data-mode="kan" aria-label="Quadro">${ic("board")}</button><button data-mode="list" aria-label="Lista">${ic("list")}</button><button data-mode="cal" aria-label="Calendário">${ic("cal")}</button></div><button class="newt" id="newt">+ Nova tarefa</button></div>
+      <div><h1 id="ptitle">Quadro</h1><div class="psub">ALPHA · NÚCLEO DE APRENDIZAGEM</div><a id="popenaba" href="#" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:8px;color:#00DBFF;font-size:12px;text-decoration:underline">↗ Abrir aba no Google Sheets</a></div>
+      <div class="pact"><button type="button" class="p-boardback" id="pconfigsheet" title="Configurar aba do quadro">⚙ Aba do quadro</button><div class="seg"><button class="on" data-mode="kan" aria-label="Quadro">${ic("board")}</button><button data-mode="list" aria-label="Lista">${ic("list")}</button><button data-mode="cal" aria-label="Calendário">${ic("cal")}</button></div><button class="newt" id="newt">+ Nova tarefa</button></div>
     </div>
     <div class="cols" id="cols"></div>
   </section>`;
@@ -1148,6 +1148,8 @@ function abrirQuadro(id) {
   quadroAtivoId = id;
   $("#painel").classList.remove("p-overview");
   $("#ptitle").textContent = quadro.nome;
+  const link = $("#popenaba");
+  if (link) { link.href = quadro.abaUrl || "#"; link.textContent = "↗ Abrir aba: " + (quadro.aba || quadro.nome); }
   pmode = "kan";
   P.querySelectorAll("[data-mode]").forEach(b => b.classList.toggle("on", b.dataset.mode === "kan"));
   drawP();
@@ -1191,7 +1193,7 @@ function abrirDialogoPainel(tipo,espacoId){
     espaco:["Nome do novo espaço?","Ex.: Projetos de Governança"],
     quadro:["Nome do novo quadro?","Ex.: Gestão de Contratos"],
     tarefa:["Nome da nova tarefa?","Ex.: Revisar contratos"],
-    vincular:["Integrar Google Sheets","Cole o link ou ID da planilha"]
+    aba:["Aba do quadro","Cole o nome ou o link da aba"]
   };
   const info=configs[tipo];
   if(!info)return;
@@ -1206,7 +1208,8 @@ function abrirDialogoPainel(tipo,espacoId){
   titulo.textContent=info[0];
   formulario.appendChild(titulo);
   const desc=document.createElement("p");
-  desc.textContent=tipo==="vincular"?"Conecte uma planilha com a aba Tarefas e as colunas A:H. Deixe vazio para voltar à planilha principal.":"Organize seus projetos em um ambiente próprio, sincronizado com o HUB ALPHA.";
+  desc.textContent=tipo==="aba"?"Todos os quadros usam a mesma planilha. Cole o nome de uma aba existente ou seu link (com gid) para associá-la a este quadro. Os cards atuais serão copiados, sem apagar a aba antiga.":"Ao criar um quadro, a aba correspondente será criada automaticamente na planilha principal.";
+  if(tipo==="aba") { const q=quadrosPainel.find(x=>x.id===quadroAtivoId); if(q) desc.textContent += " Aba atual: "+q.aba+"."; }
   formulario.appendChild(desc);
   function campo(labelTexto,placeholder,required,maxlength,id){
     const label=document.createElement("label");
@@ -1221,14 +1224,16 @@ function abrirDialogoPainel(tipo,espacoId){
     formulario.appendChild(label);
     return input;
   }
-  let inputNome=null,inputPlanilha=null;
-  if(tipo!=="vincular"){
+  let inputNome=null,inputAba=null;
+  if(tipo!=="aba"){
     inputNome=campo("Nome",info[1],true,tipo==="tarefa"?500:70,"pformnome");
   }
-  if(tipo==="quadro"||tipo==="vincular"){
-    inputPlanilha=campo("Google Sheets "+(tipo==="quadro"?"(opcional)":""),"Link ou ID da planilha",false,500,"pformplanilha");
+  if(tipo==="aba"){
+    inputAba=campo("Nome ou link da aba","Ex.: Suporte VIP ou link terminando em gid=0",true,500,"pformaba");
+    const q=quadrosPainel.find(x=>x.id===quadroAtivoId);
+    if(q) inputAba.value=q.aba||"";
     const small=document.createElement("small");
-    small.textContent="A aba Tarefas deve ter as colunas ID, TÍTULO, DESCRIÇÃO, RESPONSÁVEL, SOLICITANTE, PRIORIDADE, STATUS e DATA.";
+    small.textContent="Na mesma planilha, o ID permanece igual; cada aba tem um gid diferente no link. A aba deve possuir os cabeçalhos A:H do HUB.";
     formulario.appendChild(small);
   }
   const actions=document.createElement("div");
@@ -1240,7 +1245,7 @@ function abrirDialogoPainel(tipo,espacoId){
   const submit=document.createElement("button");
   submit.type="submit";
   submit.className="p-submit";
-  submit.textContent=tipo==="vincular"?"Salvar vínculo":"Criar";
+  submit.textContent=tipo==="aba"?"Salvar aba":"Criar";
   actions.append(cancel,submit);
   formulario.appendChild(actions);
   modal.appendChild(formulario);
@@ -1251,7 +1256,7 @@ function abrirDialogoPainel(tipo,espacoId){
     e.preventDefault();
     if(painelSalvando)return;
     const nome=inputNome?inputNome.value.trim():"";
-    const planilha=inputPlanilha?inputPlanilha.value.trim():"";
+    const aba=inputAba?inputAba.value.trim():"";
     painelSalvando=true;
     submit.disabled=true;
     submit.textContent="Salvando...";
@@ -1265,20 +1270,20 @@ function abrirDialogoPainel(tipo,espacoId){
           abrirQuadro(retorno.id);
         }
         sincronizarTudo();
-        toast(tipo==="vincular"?"Planilha vinculada com sucesso!":"Salvo com sucesso!");
+        toast(tipo==="aba"?"Aba vinculada com sucesso!":"Salvo com sucesso!");
       })
       .withFailureHandler(function(erro){
         painelSalvando=false;
         submit.disabled=false;
-        submit.textContent=tipo==="vincular"?"Salvar vínculo":"Criar";
+        submit.textContent=tipo==="aba"?"Salvar aba":"Criar";
         toast("Erro: "+(erro.message||erro));
       });
     if(tipo==="espaco")runner.criarEspaco(nome);
-    else if(tipo==="quadro")runner.criarQuadro({nome,espacoId,planilha,cor:cores[quadrosPainel.length%cores.length]});
+    else if(tipo==="quadro")runner.criarQuadro({nome,espacoId,cor:cores[quadrosPainel.length%cores.length]});
     else if(tipo==="tarefa")runner.criarTarefa({titulo:nome,quadroId:quadroAtivoId});
-    else runner.configurarPlanilhaQuadro({quadroId:quadroAtivoId,planilha});
+    else runner.configurarAbaQuadro({quadroId:quadroAtivoId,aba});
   };
-  (inputNome||inputPlanilha).focus();
+  (inputNome||inputAba).focus();
 }
 
 function solicitarEspaco(){abrirDialogoPainel("espaco");}
@@ -1310,7 +1315,7 @@ P.addEventListener("click", e => {
     e.target.closest("button").setAttribute("aria-label", oculto ? "Expandir barra lateral" : "Recolher barra lateral");
     return;
   }
-  if (e.target.closest("#pconfigsheet")) return abrirDialogoPainel("vincular");
+  if (e.target.closest("#pconfigsheet")) return abrirDialogoPainel("aba");
   const quadroBtn = e.target.closest("[data-board]");
   if (quadroBtn) return abrirQuadro(quadroBtn.dataset.board);
   const createBoard = e.target.closest("[data-create-board]");
