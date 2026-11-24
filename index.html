@@ -295,7 +295,8 @@ body.pn #painel { display: block; animation: in .45s; }
 .pbox { background: #002233 !important; color: #eaf6ff !important; border: 1px solid rgba(0,219,255,.25) !important; max-height: 90vh; overflow: auto; }
 .pbox h3 { text-align: left !important; margin: 0 0 16px !important; }
 .pbox label { display: block; font-size: 13px; color: #9fb8cc; }
-.pbox input[type=text], .pbox select { width: 100%; background: #001520; border: 1px solid rgba(0,219,255,.25); color: inherit; border-radius: 12px; padding: 10px 12px; font: inherit; margin: 4px 0 12px; }
+.pbox input[type=text], .pbox input[type=date], .pbox select, .pbox textarea { width: 100%; background: #001520; border: 1px solid rgba(0,219,255,.25); color: inherit; border-radius: 12px; padding: 10px 12px; font: inherit; margin: 4px 0 12px; }
+.pbox textarea { min-height: 92px; resize: vertical; }
 .cli { display: flex; align-items: center; gap: 10px; padding: 6px 0; color: #eaf6ff !important; font-size: 14px !important; }
 .cli span { flex: 1; }
 .cli button { background: none; border: 0; color: #9fb8cc; cursor: pointer; font-size: 18px; }
@@ -1045,8 +1046,6 @@ pt.textContent = store.get("hv_painel_t", "TOTVS Painel");
 pt.onblur = () => store.set("hv_painel_t", pt.textContent.trim() || "TOTVS Painel");
 pt.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); pt.blur(); } };
 
-const drawCl = () => $("#pcl").innerHTML = ed.chk.map((c, i) => `<label class="cli"><input type="checkbox" data-i="${i}" ${c.d ? "checked" : ""}><span>${esc(c.t)}</span><button type="button" data-x="${i}">×</button></label>`).join("");
-
 const RESPONSAVEIS_FIXOS = [
   "Luiz Carlos",
   "Luigi Trintoni",
@@ -1061,192 +1060,131 @@ const RESPONSAVEIS_FIXOS = [
   "Edineis Colombo"
 ];
 
+const PRIORIDADES = ["Baixa", "Média", "Alta", "Urgente"];
+
+function dataParaInput(valor) {
+  const texto = String(valor || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) return texto;
+  const partes = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(texto);
+  return partes ? [partes[3], partes[2], partes[1]].join("-") : "";
+}
+
 function openT(id, k) {
-  const tarefa = id ? T.find(t => t.id === id) : null;
+  if (!id) return toast("Cadastre novas tarefas diretamente no Google Sheets");
 
-  if (id && !tarefa) {
-    return toast("Tarefa não encontrada");
-  }
+  const tarefa = T.find(t => t.id === id);
+  if (!tarefa) return toast("Tarefa não encontrada");
+  ed = JSON.parse(JSON.stringify(tarefa));
 
-  ed = tarefa
-    ? JSON.parse(JSON.stringify(tarefa))
-    : {
-        id: "n" + Date.now(),
-        t: "",
-        tag: "",
-        col: k || "backlog",
-        who: [],
-        responsavel: "",
-        chk: []
-      };
+  const atual = String(ed.responsavel || "").trim();
+  const responsaveis = [...RESPONSAVEIS_FIXOS];
+  if (atual && !responsaveis.includes(atual)) responsaveis.unshift(atual);
 
-  const responsavelAtual = String(
-    ed.responsavel || ""
-  ).trim();
-
-  // Mantém visível um nome existente na planilha,
-  // mesmo que ele não esteja na lista predefinida.
-  const opcoes = [...RESPONSAVEIS_FIXOS];
-
-  if (
-    responsavelAtual &&
-    !opcoes.includes(responsavelAtual)
-  ) {
-    opcoes.unshift(responsavelAtual);
-  }
-
-  const opcoesHtml = opcoes.map(nome => `
-    <option value="${esc(nome)}"
-      ${nome === responsavelAtual ? "selected" : ""}>
-      ${esc(nome)}
-    </option>
-  `).join("");
+  const prioridadeAtual = String(ed.prioridade || ed.tag || "Média");
+  const prioridades = [...PRIORIDADES];
+  if (prioridadeAtual && !prioridades.includes(prioridadeAtual)) prioridades.unshift(prioridadeAtual);
 
   $("#pbox").innerHTML = `
-    <h3>${id ? "Editar tarefa" : "Nova tarefa"}</h3>
-
-    <label>
-      Título
-      <input type="text" id="pt" value="${esc(ed.t)}">
+    <h3>Editar tarefa</h3>
+    <label>Título
+      <input type="text" id="pt" maxlength="500" value="${esc(ed.t)}">
     </label>
-
-    <label>
-      Etiqueta
-      <input type="text" id="pg" list="tl"
-        value="${esc(ed.tag || "")}">
-      <datalist id="tl">
-        ${Object.keys(TAGS).map(x =>
-          `<option value="${esc(x)}">`
-        ).join("")}
-      </datalist>
+    <label>Descrição
+      <textarea id="pdesc" rows="4">${esc(ed.descricao || "")}</textarea>
     </label>
-
-    <label>
-      Responsável
+    <label>Responsável
       <select id="pw">
-        <option value="" ${!responsavelAtual ? "selected" : ""}>
-          Selecione um responsável
-        </option>
-        ${opcoesHtml}
+        <option value="" ${atual ? "" : "selected"}>Selecione um responsável</option>
+        ${responsaveis.map(nome => `<option value="${esc(nome)}" ${nome === atual ? "selected" : ""}>${esc(nome)}</option>`).join("")}
       </select>
     </label>
-
-    <label>
-      Coluna
+    <label>Solicitante
+      <input type="text" id="psolic" value="${esc(ed.solicitante || "")}">
+    </label>
+    <label>Prioridade
+      <select id="pprio">
+        ${prioridades.map(p => `<option value="${esc(p)}" ${p === prioridadeAtual ? "selected" : ""}>${esc(p)}</option>`).join("")}
+      </select>
+    </label>
+    <label>Status
       <select id="pc">
-        ${COLS.map(c => `
-          <option value="${c[0]}"
-            ${c[0] === ed.col ? "selected" : ""}>
-            ${c[1]}
-          </option>
-        `).join("")}
+        ${COLS.map(c => `<option value="${esc(c[0])}" ${c[0] === ed.col ? "selected" : ""}>${esc(c[1])}</option>`).join("")}
       </select>
     </label>
-
-    <label>Checklist</label>
-    <div id="pcl"></div>
-
-    <div class="ci">
-      <input type="text" id="pci"
-        placeholder="Novo item">
-      <button type="button" class="pb" id="pca">
-        Adicionar
-      </button>
-    </div>
-
+    <label>Data
+      <input type="date" id="pdata" value="${esc(dataParaInput(ed.data))}">
+    </label>
     <div class="pbtns">
-      ${id ? `
-        <button type="button" class="pb dg" id="pdel">
-          Excluir
-        </button>
-      ` : ""}
-
-      <button type="button" class="pb" id="pcan">
-        Cancelar
-      </button>
-
-      <button type="button" class="pb pri" id="psav">
-        Salvar
-      </button>
+      <button type="button" class="pb" id="pcan">Cancelar</button>
+      <button type="button" class="pb pri" id="psav">Salvar</button>
     </div>
   `;
-
-  drawCl();
   $("#pm").classList.add("open");
   $("#pt").focus();
 }
 
 const closeP = () => $("#pm").classList.remove("open");
-function addCi() { const v = $("#pci").value.trim(); if (v) { ed.chk.push({ t: v, d: 0 }); $("#pci").value = ""; drawCl(); $("#pci").focus(); } }
 
 function saveT() {
-  const titulo = $("#pt").value.trim();
-
-  if (!titulo) {
-    return toast("Dê um título à tarefa");
-  }
-
-  const responsavel = $("#pw").value;
-  const coluna = $("#pc").value;
-
-  if (!responsavel) {
-    return toast("Selecione um responsável");
-  }
-
-  const tarefaOriginal = T.find(t => t.id === ed.id);
-
-  // A criação de novas tarefas continua sendo
-  // feita diretamente no Google Sheets.
-  if (!tarefaOriginal) {
-    return toast("Crie novas tarefas pelo Google Sheets");
-  }
-
-  // Este salvamento altera apenas o responsável.
-  // Título, etiqueta, coluna e checklist não são
-  // persistidos por esta função.
-  if (
-    titulo !== tarefaOriginal.t ||
-    $("#pg").value.trim() !== (tarefaOriginal.tag || "") ||
-    coluna !== tarefaOriginal.col
-  ) {
-    return toast(
-      "Nesta versão, altere título, etiqueta e status pela planilha ou pelo Kanban"
-    );
-  }
+  if (!ed) return;
+  const dados = {
+    id: ed.id,
+    titulo: $("#pt").value.trim(),
+    descricao: $("#pdesc").value,
+    responsavel: $("#pw").value,
+    solicitante: $("#psolic").value.trim(),
+    prioridade: $("#pprio").value,
+    status: STATUS_COLUNA[$("#pc").value],
+    data: $("#pdata").value
+  };
+  if (!dados.titulo) return toast("Dê um título à tarefa");
+  if (!dados.data) return toast("Informe a data da tarefa");
 
   const botao = $("#psav");
   botao.disabled = true;
   botao.textContent = "Salvando...";
-
   google.script.run
     .withSuccessHandler(function() {
-      tarefaOriginal.responsavel = responsavel;
-      tarefaOriginal.who = [ini(responsavel)];
-
+      const tarefa = T.find(t => t.id === dados.id);
+      if (tarefa) {
+        tarefa.t = dados.titulo;
+        tarefa.descricao = dados.descricao;
+        tarefa.responsavel = dados.responsavel;
+        tarefa.solicitante = dados.solicitante;
+        tarefa.prioridade = dados.prioridade;
+        tarefa.tag = dados.prioridade;
+        tarefa.col = COLUNA_STATUS[dados.status] || "backlog";
+        const [ano, mes, dia] = dados.data.split("-");
+        tarefa.data = [dia, mes, ano].join("/");
+        tarefa.who = dados.responsavel
+          ? dados.responsavel.split(",").map(nome => ini(nome.trim())).filter(Boolean)
+          : [];
+      }
       closeP();
       drawP();
-
-      toast("Responsável atualizado com sucesso!");
+      toast("Tarefa atualizada no Google Sheets!");
       sincronizarPainel();
     })
     .withFailureHandler(function(erro) {
       botao.disabled = false;
       botao.textContent = "Salvar";
-
-      toast("Erro ao salvar: " + erro.message);
+      toast("Erro ao salvar: " + (erro.message || erro));
     })
-    .atualizarResponsavel(ed.id, responsavel);
+    .salvarTarefa(dados);
 }
 
 $("#pbox").addEventListener("click", e => {
-  const b = e.target.closest("button"); if (!b) return;
-  if (b.dataset.x !== undefined) { ed.chk.splice(+b.dataset.x, 1); drawCl(); }
-  else if (b.id === "pca") addCi(); else if (b.id === "pcan") closeP();
-  else if (b.id === "pdel") { T = T.filter(t => t.id !== ed.id); pSave(); closeP(); drawP(); }
+
+  const b = e.target.closest("button");
+
+  if (!b) return;
+
+  if (b.id === "pcan") closeP();
+
   else if (b.id === "psav") saveT();
+
 });
-$("#pbox").addEventListener("change", e => { if (e.target.dataset.i !== undefined) ed.chk[+e.target.dataset.i].d = e.target.checked ? 1 : 0; });
-$("#pbox").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.id === "pci") { e.preventDefault(); addCi(); } });
+
 $("#pm").onclick = e => { if (e.target.id === "pm") closeP(); };
 addEventListener("keydown", e => { if (e.key === "Escape") { closeMod(); closeP(); $("#srDrop").classList.remove("open"); } });
 
@@ -1264,63 +1202,6 @@ sincronizarPainel();
 
 // Consulta novas tarefas a cada 10 segundos
 setInterval(sincronizarPainel, 10000);
-
-</script>
-<script>
-
-const API_KANBAN = {
-  listar() {
-    return new Promise((resolve, reject) => {
-      google.script.run
-        .withSuccessHandler(resolve)
-        .withFailureHandler(reject)
-        .listarTarefas();
-    });
-  },
-
-  atualizarStatus(id, status) {
-    return new Promise((resolve, reject) => {
-      google.script.run
-        .withSuccessHandler(resolve)
-        .withFailureHandler(reject)
-        .atualizarStatus(id, status);
-    });
-  }
-};
-
-let tarefasAtuais = [];
-let sincronizando = false;
-
-async function sincronizarKanban() {
-  if (sincronizando) return;
-  sincronizando = true;
-
-  try {
-    const tarefas = await API_KANBAN.listar();
-
-    if (JSON.stringify(tarefas) !==
-        JSON.stringify(tarefasAtuais)) {
-      tarefasAtuais = tarefas;
-      renderizarTarefas(tarefas);
-    }
-  } catch (erro) {
-    console.error('Erro na sincronização:', erro);
-  } finally {
-    sincronizando = false;
-  }
-}
-
-async function moverTarefa(id, novoStatus) {
-  try {
-    await API_KANBAN.atualizarStatus(id, novoStatus);
-    await sincronizarKanban();
-  } catch (erro) {
-    console.error('Erro ao mover tarefa:', erro);
-  }
-}
-
-sincronizarKanban();
-setInterval(sincronizarKanban, 10000);
 
 </script>
 </body>
