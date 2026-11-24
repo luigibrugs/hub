@@ -376,6 +376,64 @@ body.pn #painel { display: block; animation: in .45s; }
 #painel.p-overview #pdetalhe {display:none}
 #painel:not(.p-overview) #pvisao {display:none}
 @media(max-width:800px){#painel{padding-left:70px}}
+
+/* ===== Compacto, fluido e sidebar recolhível ===== */
+#painel {transition:padding-left .26s cubic-bezier(.2,.7,.2,1);padding-left:280px}
+#painel .rail {transition:transform .26s cubic-bezier(.2,.7,.2,1)}
+#painel.p-rail-hidden {padding-left:0}
+#painel.p-rail-hidden .rail {transform:translateX(-103%);pointer-events:none}
+#prailtoggle {position:fixed;top:17px;left:294px;z-index:40;width:39px;height:39px;display:grid;place-items:center;cursor:pointer;border-radius:12px;border:1px solid rgba(0,219,255,.25);background:#002233;color:#00DBFF;box-shadow:0 5px 15px rgba(0,25,45,.12);transition:left .26s cubic-bezier(.2,.7,.2,1)}
+#prailtoggle svg {width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}
+#painel.p-rail-hidden #prailtoggle {left:14px}
+#painel .p-boardgrid {grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:13px;max-width:1160px}
+#painel .p-boardcard,#painel .p-create {min-height:124px;border-radius:13px}
+#painel .p-cover {height:78px}
+#painel .p-bname {padding:11px 12px;font-size:13px}
+#painel .p-create strong {font-size:28px}
+#painel .p-space {margin:12px 0 25px}
+#painel .p-spacehead {font-size:20px}
+#painel .cols {grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px;padding:0 25px 70px}
+#painel .col {min-height:300px;padding:12px;border-radius:15px;gap:9px}
+#painel .colh {font-size:15px;margin-bottom:2px;gap:8px}
+#painel .colh svg {width:20px;height:20px}
+#painel .colh i {height:25px;min-width:28px;font-size:12px}
+#painel .task {border-radius:11px;padding:10px 12px 10px 22px;animation:pSoftIn .22s both;animation-delay:calc(var(--index, 0)*18ms)}
+#painel .task::before {left:9px;top:12px;width:3px;height:17px;box-shadow:none}
+#painel .tt {font-size:13px;margin-bottom:7px}
+#painel .chip {font-size:11px;padding:3px 8px}
+#painel .pav {width:24px;height:24px;font-size:10px}
+#painel .add {padding:10px;border-radius:12px;font-size:12px}
+#painel #pdetalhe .phead {gap:14px;margin:18px 25px 22px}
+#painel #pdetalhe h1 {font-size:clamp(23px,3vw,31px)}
+#painel .pact {gap:10px}
+#painel .newt {font-size:13px;padding:10px 17px;border-radius:13px;box-shadow:none}
+#painel #pvisao, #painel #pdetalhe {animation:pSoftIn .23s ease-out both}
+#painel .p-boardcard,#painel .p-create {animation:pSoftIn .23s ease-out both;animation-delay:calc(var(--index, 0)*22ms)}
+@keyframes pSoftIn {from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
+.p-modal-layer {position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:rgba(0,18,30,.5);backdrop-filter:blur(5px);padding:20px;animation:pFade .16s ease-out both}
+@keyframes pFade {from{opacity:0}to{opacity:1}}
+.p-dialog {width:min(440px,100%);border-radius:21px;background:#f8fcfe;color:#002233;border:1px solid rgba(0,136,163,.12);box-shadow:0 25px 80px rgba(0,20,40,.22);padding:26px;animation:pSoftIn .2s ease-out both}
+.p-dialog h2 {font-size:22px;margin:0 0 6px;font-weight:800}
+.p-dialog p {font-size:13px;color:#648091;margin:0 0 18px;line-height:1.55}
+.p-dialog label {display:block;margin-top:14px;font-size:13px;font-weight:700}
+.p-dialog input {width:100%;margin-top:7px;box-sizing:border-box;border-radius:10px;border:1px solid #d4e6ed;background:white;color:#002233;padding:12px;font:inherit;font-size:14px;outline:none}
+.p-dialog input:focus {border-color:#00b6ce;box-shadow:0 0 0 3px rgba(0,219,255,.1)}
+.p-dialog .p-actions {display:flex;justify-content:flex-end;gap:9px;margin-top:22px}
+.p-dialog button {cursor:pointer;border:0;border-radius:11px;padding:11px 18px;font:inherit;font-size:13px;font-weight:700}
+.p-dialog .p-cancel {background:#eaf2f5;color:#002233}
+.p-dialog .p-submit {background:#00cce5;color:#002233}
+.p-dialog button:disabled {opacity:.55;cursor:wait}
+.p-dialog small {display:block;color:#648091;font-size:11px;margin-top:5px}
+@media(max-width:800px){
+ #painel {padding-left:70px}
+ #prailtoggle {left:76px;top:12px}
+ #painel.p-rail-hidden #prailtoggle {left:10px}
+ #painel .cols {grid-template-columns:repeat(auto-fit,minmax(185px,1fr));padding:0 12px 60px;gap:9px}
+ #painel .p-boardgrid {grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+}
+@media(prefers-reduced-motion:reduce){
+ #painel,#painel .rail,#prailtoggle,#painel .task,#painel .p-boardcard,#painel .p-create,#painel #pvisao,#painel #pdetalhe,.p-modal-layer,.p-dialog {animation:none!important;transition:none!important}
+}
 </style>
 </head>
 <body>
@@ -1028,9 +1086,10 @@ function sincronizarPainel() {
 
 const chip = g => { if (!g) return ""; const c = TAGS[g] || ["#2c3b52", "#d8e2f0"]; return `<span class="chip" style="background:${c[0]};color:${c[1]}">${esc(g)}</span>`; };
 const avs = w => `<span class="avs">${w.map(x => `<span class="pav" style="background:${AVC[(x.charCodeAt(0) + (x.charCodeAt(1) || 0)) % 5]}">${esc(x)}</span>`).join("")}</span>`;
-const tk = (t, i) => `<div class="task" draggable="true" data-id="${t.id}" style="--bar:${col(t.col)[2]};animation-delay:${i * 40}ms"><div class="tt">${esc(t.t)}</div><div class="tm">${chip(t.tag)}${t.chk.length ? `<span class="cb">${t.chk.filter(c => c.d).length}/${t.chk.length} itens</span>` : ""}${avs(t.who)}</div></div>`;
+const tk = (t, i) => `<div class="task" draggable="true" data-id="${t.id}" style="--bar:${col(t.col)[2]};--index:${i}"><div class="tt">${esc(t.t)}</div><div class="tm">${chip(t.tag)}${t.chk.length ? `<span class="cb">${t.chk.filter(c => c.d).length}/${t.chk.length} itens</span>` : ""}${avs(t.who)}</div></div>`;
 
 $("#painel").innerHTML = `
+  <button type="button" id="prailtoggle" aria-label="Recolher barra lateral" title="Mostrar ou ocultar menu"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
   <nav class="rail" id="rail"></nav>
   <header class="ptop">
     <div class="plogo">ALPHA</div>
@@ -1044,7 +1103,7 @@ $("#painel").innerHTML = `
     <div class="phead">
       <button type="button" class="p-boardback" id="pvoltar">← Todos os quadros</button>
       <div><h1 id="ptitle">Quadro</h1><div class="psub">ALPHA · NÚCLEO DE APRENDIZAGEM</div></div>
-      <div class="pact"><div class="seg"><button class="on" data-mode="kan" aria-label="Quadro">${ic("board")}</button><button data-mode="list" aria-label="Lista">${ic("list")}</button><button data-mode="cal" aria-label="Calendário">${ic("cal")}</button></div><button class="newt" id="newt">+ Nova tarefa</button></div>
+      <div class="pact"><button type="button" class="p-boardback" id="pconfigsheet" title="Vincular Google Sheets">⚙ Planilha do quadro</button><div class="seg"><button class="on" data-mode="kan" aria-label="Quadro">${ic("board")}</button><button data-mode="list" aria-label="Lista">${ic("list")}</button><button data-mode="cal" aria-label="Calendário">${ic("cal")}</button></div><button class="newt" id="newt">+ Nova tarefa</button></div>
     </div>
     <div class="cols" id="cols"></div>
   </section>`;
@@ -1070,7 +1129,7 @@ function desenharVisaoQuadros() {
     return `<section class="p-space"><h2 class="p-spacehead">${esc(espaco.nome)}${espaco.fixo ? '<span class="p-fixed">♙ Área fixa</span>' : ""}</h2>
       <div class="p-boardgrid">
         <button type="button" class="p-create" data-create-board="${esc(espaco.id)}"><strong>＋</strong>Criar quadro</button>
-        ${quadros.map(q => `<button class="p-boardcard" type="button" data-board="${esc(q.id)}"><div class="p-cover" style="--bcolor:${esc(q.cor)}"><span>${T.filter(t => (t.quadroId || "quadro-administrativo") === q.id).length} cards</span></div><div class="p-bname">${esc(q.nome)}</div></button>`).join("")}
+        ${quadros.map((q,idx) => `<button class="p-boardcard" style="--index:${idx}" type="button" data-board="${esc(q.id)}"><div class="p-cover" style="--bcolor:${esc(q.cor)}"><span>${T.filter(t => (t.quadroId || "quadro-administrativo") === q.id).length} cards</span></div><div class="p-bname">${esc(q.nome)}</div></button>`).join("")}
       </div></section>`;
   }).join("") + '<button type="button" class="p-spaceadd" data-create-space>＋ Criar espaço</button>';
 
@@ -1186,6 +1245,12 @@ function drawP() {
 
 const P = $("#painel");
 P.addEventListener("click", e => {
+  if (e.target.closest("#prailtoggle")) {
+    const oculto = P.classList.toggle("p-rail-hidden");
+    e.target.closest("button").setAttribute("aria-label", oculto ? "Expandir barra lateral" : "Recolher barra lateral");
+    return;
+  }
+  if (e.target.closest("#pconfigsheet")) return abrirDialogoPainel("vincular");
   const quadroBtn = e.target.closest("[data-board]");
   if (quadroBtn) return abrirQuadro(quadroBtn.dataset.board);
   const createBoard = e.target.closest("[data-create-board]");
@@ -1241,7 +1306,7 @@ P.addEventListener("drop", e => {
       toast('Erro ao atualizar: ' + erro.message);
       sincronizarPainel();
     })
-    .atualizarStatus(id, novoStatus);
+    .atualizarStatus(id, novoStatus, tarefa.quadroId);
 });
 
 const RESPONSAVEIS_FIXOS = [
@@ -1327,6 +1392,7 @@ function saveT() {
   if (!ed) return;
   const dados = {
     id: ed.id,
+    quadroId: ed.quadroId,
     titulo: $("#pt").value.trim(),
     descricao: $("#pdesc").value,
     responsavel: $("#pw").value,
