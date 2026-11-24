@@ -1057,6 +1057,7 @@ function sincronizarPainel() {
     .withSuccessHandler(function(dados) {
       T = dados.map(item => ({
         id: item.id,
+        quadroId: item.quadroId || 'quadro-administrativo',
         t: item.titulo,
         descricao: item.descricao,
         solicitante: item.solicitante,
