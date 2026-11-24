@@ -23,7 +23,7 @@ function doGet() {
   return HtmlService.createHtmlOutputFromFile('index').setTitle('ALPHA | Portal Corporativo');
 }
 function planilha_() { return SpreadsheetApp.openById(PLANILHA_ID); }
-function trava_() { const l=LockService.getScriptLock(); l.waitLock(15000); return l; }
+function trava_() { const l=LockService.getScriptLock(); l.waitLock(30000); return l; }
 function obterOuCriar_(nome,cabecalhos) {
   const ss=planilha_();
   let aba=ss.getSheetByName(nome);
@@ -125,26 +125,35 @@ function copiarSemDuplicar_(origem,destino,quadroId,comColunaQuadro) {
 function migrarTarefasLegadas_() {
   const key='HUB_ABAS_MIGRADAS_V1_'+PLANILHA_ID;
   const props=PropertiesService.getScriptProperties();
-  if(props.getProperty(key)==='sim')return {copiadas:0,concluida:true};
+  if(props.getProperty(key)==='sim')return {copiadas:0,concluida:true,avisos:[]};
+
   const ss=planilha_(),quadros=obterQuadros_();
   const legado=ss.getSheetByName(ABA);
   let copiadas=0;
-  const erros=[];
+  const avisos=[];
   quadros.forEach(q=>{
     const destino=ss.getSheetByName(q.aba);
-    if(legado)copiadas+=copiarSemDuplicar_(legado,destino,q.id,true);
+    // A migração nunca apaga ou substitui tarefas: apenas copia IDs ausentes.
+    if(legado) {
+      try {copiadas+=copiarSemDuplicar_(legado,destino,q.id,true);}
+      catch(e){avisos.push('Aba Tarefas → '+q.nome+': '+e.message);}
+    }
     if(q.legado) {
       try {
         const planilhaExterna=SpreadsheetApp.openById(q.legado);
         const origem=planilhaExterna.getSheetByName(ABA);
         if(!origem)throw new Error('Aba Tarefas não encontrada');
         copiadas+=copiarSemDuplicar_(origem,destino,q.id,false);
-      }catch(e){erros.push(q.nome+': '+e.message);}
+      } catch(e) {
+        avisos.push('Importação anterior de '+q.nome+' pendente: '+e.message);
+      }
     }
   });
-  if(erros.length)throw new Error('Algumas planilhas antigas não puderam ser copiadas: '+erros.join('; '));
-  props.setProperty(key,'sim');
-  return {copiadas,concluida:true};
+  // Não interromper o Kanban porque uma planilha externa antiga está inacessível.
+  // Mantém o marcador pendente para possibilitar uma nova tentativa.
+  if(!avisos.length)props.setProperty(key,'sim');
+  if(avisos.length)Logger.log('HUB ALPHA — avisos de migração: '+avisos.join(' | '));
+  return {copiadas,concluida:!avisos.length,avisos};
 }
 function preparar_() {
   iniciarEstrutura_();
@@ -337,4 +346,32 @@ function testarConexao() {
   Logger.log('Planilha conectada. Quadros: '+resultado.quadros.length);
   Logger.log('Tarefas: '+listarTarefas().length);
   return true;
+}
+
+/**
+ * Execute pelo editor do Apps Script para encontrar o erro real.
+ * Não exclui dados.
+ */
+function diagnosticarIntegracao() {
+  const resultado={planilha:'',abas:[],quadros:[],migracao:null,erros:[]};
+  try{
+    const ss=planilha_();
+    resultado.planilha=ss.getName();
+    resultado.abas=ss.getSheets().map(a=>({nome:a.getName(),linhas:a.getLastRow()}));
+    try{
+      const inicio=iniciarEstrutura_();
+      resultado.quadros=obterQuadros_().map(q=>({
+        nome:q.nome,aba:q.aba,
+        existe:!!ss.getSheetByName(q.aba),
+        origemLegadaConfigurada:!!q.legado
+      }));
+    }catch(e){resultado.erros.push('Estrutura: '+e.message);}
+    try{resultado.migracao=migrarTarefasLegadas_();}
+    catch(e){resultado.erros.push('Migração: '+e.message);}
+    try{
+      resultado.totalTarefas=listarTarefas().length;
+    }catch(e){resultado.erros.push('Leitura: '+e.message);}
+  }catch(e){resultado.erros.push('Acesso: '+e.message);}
+  Logger.log(JSON.stringify(resultado,null,2));
+  return resultado;
 }
