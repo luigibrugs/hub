@@ -1178,54 +1178,113 @@ function sincronizarTudo(manual) {
     toast("Erro na sincronização: "+(e.message||e));
   }).estruturaPainel();
 }
-function solicitarEspaco() {
-  if (painelSalvando) return;
-  const nome=prompt("Nome do novo espaço:");
-  if (nome===null) return;
-  if (!nome.trim()) return toast("Informe um nome");
-  painelSalvando=true;
-  google.script.run.withSuccessHandler(function(){
-    painelSalvando=false; sincronizarTudo();
-    toast("Espaço criado!");
-  }).withFailureHandler(function(e){
-    painelSalvando=false; toast("Erro: "+(e.message||e));
-  }).criarEspaco(nome.trim());
+function fecharDialogoPainel(){
+  const modal=$("#pmodal");
+  if(modal)modal.remove();
 }
-function solicitarQuadro(espacoId) {
-  if (painelSalvando) return;
-  const nome=prompt("Nome do novo quadro:");
-  if (nome===null) return;
-  if (!nome.trim()) return toast("Informe um nome");
-  painelSalvando=true;
-  const cores=["#00b6ce","#8155df","#02c4d4","#cd20a0","#13a889","#ef8e4a"];
-  const cor=cores[quadrosPainel.length % cores.length];
-  google.script.run.withSuccessHandler(function(quadro){
-    painelSalvando=false; sincronizarTudo();
-    abrirQuadroLocalAposCriar(quadro);
-  }).withFailureHandler(function(e){
-    painelSalvando=false; toast("Erro: "+(e.message||e));
-  }).criarQuadro({nome:nome.trim(),espacoId,cor});
+
+function abrirDialogoPainel(tipo,espacoId){
+  if(painelSalvando)return;
+  fecharDialogoPainel();
+  const configs={
+    espaco:["Nome do novo espaço?","Ex.: Projetos de Governança"],
+    quadro:["Nome do novo quadro?","Ex.: Gestão de Contratos"],
+    tarefa:["Nome da nova tarefa?","Ex.: Revisar contratos"],
+    vincular:["Integrar Google Sheets","Cole o link ou ID da planilha"]
+  };
+  const info=configs[tipo];
+  if(!info)return;
+  const modal=document.createElement("div");
+  modal.id="pmodal";
+  modal.className="p-modal-layer";
+  const formulario=document.createElement("form");
+  formulario.className="p-dialog";
+  formulario.id="pform";
+  formulario.autocomplete="off";
+  const titulo=document.createElement("h2");
+  titulo.textContent=info[0];
+  formulario.appendChild(titulo);
+  const desc=document.createElement("p");
+  desc.textContent=tipo==="vincular"?"Conecte uma planilha com a aba Tarefas e as colunas A:H. Deixe vazio para voltar à planilha principal.":"Organize seus projetos em um ambiente próprio, sincronizado com o HUB ALPHA.";
+  formulario.appendChild(desc);
+  function campo(labelTexto,placeholder,required,maxlength,id){
+    const label=document.createElement("label");
+    label.textContent=labelTexto;
+    const input=document.createElement("input");
+    input.id=id;
+    input.type="text";
+    input.placeholder=placeholder;
+    input.required=required;
+    if(maxlength)input.maxLength=maxlength;
+    label.appendChild(input);
+    formulario.appendChild(label);
+    return input;
+  }
+  let inputNome=null,inputPlanilha=null;
+  if(tipo!=="vincular"){
+    inputNome=campo("Nome",info[1],true,tipo==="tarefa"?500:70,"pformnome");
+  }
+  if(tipo==="quadro"||tipo==="vincular"){
+    inputPlanilha=campo("Google Sheets "+(tipo==="quadro"?"(opcional)":""),"Link ou ID da planilha",false,500,"pformplanilha");
+    const small=document.createElement("small");
+    small.textContent="A aba Tarefas deve ter as colunas ID, TÍTULO, DESCRIÇÃO, RESPONSÁVEL, SOLICITANTE, PRIORIDADE, STATUS e DATA.";
+    formulario.appendChild(small);
+  }
+  const actions=document.createElement("div");
+  actions.className="p-actions";
+  const cancel=document.createElement("button");
+  cancel.type="button";
+  cancel.className="p-cancel";
+  cancel.textContent="Cancelar";
+  const submit=document.createElement("button");
+  submit.type="submit";
+  submit.className="p-submit";
+  submit.textContent=tipo==="vincular"?"Salvar vínculo":"Criar";
+  actions.append(cancel,submit);
+  formulario.appendChild(actions);
+  modal.appendChild(formulario);
+  $("#painel").appendChild(modal);
+  cancel.onclick=fecharDialogoPainel;
+  modal.onclick=e=>{if(e.target===modal)fecharDialogoPainel();};
+  formulario.onsubmit=e=>{
+    e.preventDefault();
+    if(painelSalvando)return;
+    const nome=inputNome?inputNome.value.trim():"";
+    const planilha=inputPlanilha?inputPlanilha.value.trim():"";
+    painelSalvando=true;
+    submit.disabled=true;
+    submit.textContent="Salvando...";
+    const cores=["#00b6ce","#8155df","#02c4d4","#cd20a0","#13a889","#ef8e4a"];
+    const runner=google.script.run
+      .withSuccessHandler(function(retorno){
+        painelSalvando=false;
+        fecharDialogoPainel();
+        if(tipo==="quadro"&&retorno&&retorno.id){
+          quadrosPainel.push(retorno);
+          abrirQuadro(retorno.id);
+        }
+        sincronizarTudo();
+        toast(tipo==="vincular"?"Planilha vinculada com sucesso!":"Salvo com sucesso!");
+      })
+      .withFailureHandler(function(erro){
+        painelSalvando=false;
+        submit.disabled=false;
+        submit.textContent=tipo==="vincular"?"Salvar vínculo":"Criar";
+        toast("Erro: "+(erro.message||erro));
+      });
+    if(tipo==="espaco")runner.criarEspaco(nome);
+    else if(tipo==="quadro")runner.criarQuadro({nome,espacoId,planilha,cor:cores[quadrosPainel.length%cores.length]});
+    else if(tipo==="tarefa")runner.criarTarefa({titulo:nome,quadroId:quadroAtivoId});
+    else runner.configurarPlanilhaQuadro({quadroId:quadroAtivoId,planilha});
+  };
+  (inputNome||inputPlanilha).focus();
 }
-function abrirQuadroLocalAposCriar(quadro) {
-  quadrosPainel.push(quadro);
-  abrirQuadro(quadro.id);
-  toast("Quadro criado!");
-}
-function solicitarTarefa() {
-  if (!quadroAtivoId || painelSalvando) return;
-  const titulo=prompt("Título da nova tarefa:");
-  if(titulo===null) return;
-  if(!titulo.trim()) return toast("Informe um título");
-  painelSalvando=true;
-  google.script.run.withSuccessHandler(function(){
-    painelSalvando=false;
-    sincronizarPainel();
-    toast("Tarefa criada no quadro!");
-  }).withFailureHandler(function(e){
-    painelSalvando=false;
-    toast("Erro: "+(e.message||e));
-  }).criarTarefa({titulo:titulo.trim(),quadroId:quadroAtivoId});
-}
+
+function solicitarEspaco(){abrirDialogoPainel("espaco");}
+
+function solicitarQuadro(espacoId){abrirDialogoPainel("quadro",espacoId);}
+
+function solicitarTarefa(){if(quadroAtivoId)abrirDialogoPainel("tarefa");}
 
 function drawP() {
   if (!quadroAtivoId) return;
@@ -1450,7 +1509,7 @@ $("#pbox").addEventListener("click", e => {
 });
 
 $("#pm").onclick = e => { if (e.target.id === "pm") closeP(); };
-addEventListener("keydown", e => { if (e.key === "Escape") { closeMod(); closeP(); $("#srDrop").classList.remove("open"); } });
+addEventListener("keydown", e => { if (e.key === "Escape") { fecharDialogoPainel(); closeMod(); closeP(); $("#srDrop").classList.remove("open"); } });
 
 
 abrirVisaoQuadros();
