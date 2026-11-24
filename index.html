@@ -368,6 +368,14 @@ body.pn #painel { display: block; animation: in .45s; }
   #painel { padding-left: 64px; } .rail { width: 64px; } .rail a, .rail button { width: 42px; height: 42px; }
   #painel::after { left: 64px; } .ptop, .phead, .cols, .plist { margin-left: 14px; margin-right: 14px; padding-left: 14px; padding-right: 14px; } .pact { margin-left: 0; }
 }
+
+/* Ajustes finais de largura: declarados após os estilos antigos do Kanban */
+#painel { padding-left:280px; }
+#painel.p-overview { color:#002233; background:radial-gradient(circle at 94% 4%,rgba(0,219,255,.12),transparent 34%),#f2f8fb; }
+#painel.p-overview .ptop,#painel.p-overview .plogo {color:#002233}
+#painel.p-overview #pdetalhe {display:none}
+#painel:not(.p-overview) #pvisao {display:none}
+@media(max-width:800px){#painel{padding-left:70px}}
 </style>
 </head>
 <body>
