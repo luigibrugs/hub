@@ -733,8 +733,8 @@ body .m-input,body .m-select,body .m-textarea,body .sr-wrap input{
  min-height:calc(40px * var(--alpha-ui-mult));padding:calc(9px * var(--alpha-ui-mult));
 }
 body .pt-boards{gap:calc(18px * var(--alpha-board-mult));}
-body .tr-card,body .pt-add-tile{width:calc(176px * var(--alpha-board-mult));min-width:calc(176px * var(--alpha-board-mult));min-height:calc(150px * var(--alpha-board-mult));}
-body .tr-cover{min-height:calc(100px * var(--alpha-board-mult));}
+body .tr-card,body .pt-add-tile{width:calc(235px * var(--alpha-board-mult));min-width:calc(235px * var(--alpha-board-mult));min-height:calc(138px * var(--alpha-board-mult));}
+body .tr-cover{min-height:calc(76px * var(--alpha-board-mult));}
 body .pt-env{padding:calc(8px * var(--alpha-board-mult)) 0}
 body .pt-env-del,body .tr-del{opacity:1;min-width:32px;min-height:32px}
 .alpha-hub-actions{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0 22px}
@@ -754,6 +754,13 @@ body.alpha-reduce-motion *,body.alpha-reduce-motion *:before,body.alpha-reduce-m
 @media(max-width:720px){body .pt-boards{gap:10px}body .tr-card,body .pt-add-tile{max-width:calc(50vw - 22px);min-width:140px}}
 
 .alpha-easy-guide{display:none;margin:10px 0 16px;padding:14px;border:2px solid var(--cyd);border-radius:12px;background:var(--surface-soft);font-weight:700;font-size:17px;line-height:1.55;color:var(--ink)}.alpha-easy .alpha-easy-guide{display:block}
+
+.alpha-del-label{display:none}.alpha-easy .alpha-del-label{display:inline}
+.alpha-easy .tr-del{width:auto;min-width:82px;padding:0 10px;display:flex;align-items:center;justify-content:center;gap:5px;font-size:13px}
+body[data-contrast="high"]::before,body[data-contrast="maximum"]::before{display:none}
+body[data-contrast="high"] .glass,body[data-contrast="maximum"] .glass{backdrop-filter:none}
+body.alpha-easy .pt-env-del,body.alpha-easy .tr-del,body.alpha-easy .kb-col-del{font-weight:800}
+button:focus-visible,a:focus-visible,[role="button"]:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--cyd);outline-offset:3px}
 </style>
 </head>
 <body class="auth-lock">
@@ -997,17 +1004,19 @@ const store = {
 
 
 const ALPHA_A11Y_KEY="alpha-accessibility-v2";
-const ALPHA_A11Y_DEFAULT={cards:1,text:1,ui:1,boards:2,contrast:"normal",easy:false,sounds:false,motion:true};
+const ALPHA_A11Y_DEFAULT={cards:1,text:2,ui:1,boards:2,contrast:"normal",easy:false,sounds:false,motion:true};
 let alphaA11y={...ALPHA_A11Y_DEFAULT,...store.get(ALPHA_A11Y_KEY,{})};
 const alphaScale=(v,min=0,max=4)=>Math.max(min,Math.min(max,Number(v)||0));
 function alphaCardSize(level){alphaA11y.cards=alphaScale(level,0,3);alphaApplyAccessibility();}
 function alphaApplyAccessibility() {
   alphaA11y={...ALPHA_A11Y_DEFAULT,...alphaA11y};
-  if(alphaA11y.easy){alphaA11y.text=Math.max(3,alphaA11y.text);alphaA11y.ui=Math.max(2,alphaA11y.ui);alphaA11y.boards=Math.max(2,alphaA11y.boards);}
+  const textLevel=alphaA11y.easy?Math.max(3,alphaA11y.text):alphaA11y.text;
+  const uiLevel=alphaA11y.easy?Math.max(2,alphaA11y.ui):alphaA11y.ui;
+  const boardsLevel=alphaA11y.easy?Math.max(2,alphaA11y.boards):alphaA11y.boards;
   document.body.dataset.cardSize=String(alphaScale(alphaA11y.cards,0,3));
-  document.body.dataset.textLevel=String(alphaScale(alphaA11y.text));
-  document.body.dataset.uiLevel=String(alphaScale(alphaA11y.ui));
-  document.body.dataset.boardsLevel=String(alphaScale(alphaA11y.boards));
+  document.body.dataset.textLevel=String(alphaScale(textLevel));
+  document.body.dataset.uiLevel=String(alphaScale(uiLevel));
+  document.body.dataset.boardsLevel=String(alphaScale(boardsLevel));
   document.body.dataset.contrast=String(alphaA11y.contrast);
   document.body.classList.toggle("alpha-easy",!!alphaA11y.easy);
   document.body.classList.toggle("alpha-reduce-motion",!alphaA11y.motion);
@@ -2310,7 +2319,7 @@ function renderPainelHub() {
                     <span class="tr-name">${esc(b.title)}</span>
                   </div>
                 </button>
-                <button type="button" class="tr-del" data-del-board-hub="${b.id}" title="Excluir quadro" aria-label="Excluir quadro ${esc(b.title)}">×</button>
+                <button type="button" class="tr-del" data-del-board-hub="${b.id}" title="Excluir quadro" aria-label="Excluir quadro ${esc(b.title)}">×<span class="alpha-del-label"> Excluir</span></button>
               </div>`;
           }).join("")}
         </div>
