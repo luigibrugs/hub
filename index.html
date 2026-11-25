@@ -1644,7 +1644,7 @@ setInterval(()=>{
   if(document.body.classList.contains("auth-lock"))return;
   if($("#mod")?.classList.contains("open"))return;
   syncFromGoogleSheet(true);
-},20000);
+},30000);
 
 // ==================== 3. DADOS INICIAIS ====================
 const ADM_CONTATOS = [
@@ -2246,7 +2246,10 @@ async function alphaDeleteBoard(board){
 async function alphaDeleteEnv(env){
  if(!env)return;
  try{
-  if(env._remoteId)await alphaCall("excluirEspaco",env._remoteId);
+  if(env.orphan){
+    const related=painelData.boards.filter(b=>b.envId===env.id);
+    for(const board of related)if(board._remoteId)await alphaCall("excluirQuadro",board._remoteId);
+  }else if(env._remoteId)await alphaCall("excluirEspaco",env._remoteId);
   painelData.boards=painelData.boards.filter(b=>b.envId!==env.id);
   painelData.envs=painelData.envs.filter(e=>e.id!==env.id);
   savePainelData();renderPainelHub();toast("Espaço e seus quadros excluídos.");
@@ -2261,6 +2264,7 @@ async function alphaRenameBoard(board,newName){
 }
 function alphaRenameEnv(env){
  if(!env)return;
+ if(env.orphan)return toast("Este grupo é temporário. Corrija a aba Espacos para reorganizar esses quadros.");
  $("#box").innerHTML=`<h3>Renomear espaço</h3><p>Atualize o nome do espaço.</p><label for="alphaRenamedEnv">Novo nome</label><input class="m-input" id="alphaRenamedEnv" value="${esc(env.title)}"><div class="m-acts"><button class="btn" id="cl">Cancelar</button><button class="m-btn-pri" id="alphaRenameSave">Salvar</button></div>`;
  $("#mod").classList.add("open");$("#cl").onclick=closeMod;
  $("#alphaRenameSave").onclick=async()=>{
