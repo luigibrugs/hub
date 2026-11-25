@@ -4,7 +4,9 @@
  * Quadros e Espacos são abas de configuração.
  * Tarefas é mantida como arquivo legado (backup, não apagado).
  */
-const PLANILHA_ID = '16Tu5wve7bFeS0adr0PuUhs0Mf7Jgn6AQEm2Shz0XJQQ';
+const PLANILHA_ID_PADRAO = '16Tu5wve7bFeS0adr0PuUhs0Mf7Jgn6AQEm2Shz0XJQQ';
+const PLANILHA_ID = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID') || PLANILHA_ID_PADRAO;
+let planilhaCache_ = null;
 const ABA = 'Tarefas';
 const ESPACOS_ABA = 'Espacos';
 const QUADROS_ABA = 'Quadros';
@@ -27,8 +29,9 @@ const RESPONSAVEIS_FIXOS = [
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('index').setTitle('ALPHA | Portal Corporativo');
 }
-function planilha_() { return SpreadsheetApp.openById(PLANILHA_ID); }
+function planilha_() { return planilhaCache_ || (planilhaCache_ = SpreadsheetApp.openById(PLANILHA_ID)); }
 function trava_() { const l=LockService.getScriptLock(); l.waitLock(30000); return l; }
+function liberarTrava_(lock) { try { SpreadsheetApp.flush(); } finally { lock.releaseLock(); } }
 function obterOuCriar_(nome,cabecalhos) {
   const ss=planilha_();
   let aba=ss.getSheetByName(nome);
@@ -70,7 +73,9 @@ function iniciarEstrutura_() {
     ['quadro-transformacao',ESPACO_FIXO,'Transformação Digital','#8155df','','Transformação Digital'],
     ['quadro-atendimento',ESPACO_FIXO,'Atendimento VIP - TI','#02c4d4','','Suporte VIP']
   ]);
-  quadros.getRange(1,5,1,2).setValues([['PLANILHA_ID_LEGADO','ABA_TAREFAS']]);
+  const header=quadros.getRange(1,5,1,2);
+  const atual=header.getValues()[0];
+  if(atual[0]!=='PLANILHA_ID_LEGADO'||atual[1]!=='ABA_TAREFAS')header.setValues([['PLANILHA_ID_LEGADO','ABA_TAREFAS']]);
   // Primeira adaptação da planilha: oferece quatro listas para cada quadro existente.
   // Depois disso, qualquer remoção em Listas será respeitada.
   const listasKey='HUB_LISTAS_INICIALIZADAS_'+PLANILHA_ID;
@@ -131,7 +136,7 @@ function iniciarEstrutura_() {
     });
     if(changed)listas.getRange(2,1,n,5).setValues(rows);
   }
-  bootstrap.setProperty(initialized,'sim');
+  if(firstRun)bootstrap.setProperty(initialized,'sim');
   return {espacos,quadros};
 }
 function obterQuadros_() {
@@ -207,19 +212,25 @@ function migrarTarefasLegadas_() {
   if(avisos.length)Logger.log('HUB ALPHA — avisos de migração: '+avisos.join(' | '));
   return {copiadas,concluida:!avisos.length,avisos};
 }
-function preparar_() {
-  iniciarEstrutura_();
-  return migrarTarefasLegadas_();
+function preparar_(revisarEstrutura) {
+  const props=PropertiesService.getScriptProperties();
+  const firstRun=props.getProperty('HUB_ESTRUTURA_INICIALIZADA_'+PLANILHA_ID)!=='sim';
+  if(firstRun||revisarEstrutura)iniciarEstrutura_();
+  // Importação antiga não deve ser repetida durante cada leitura/gravação.
+  // Em uma instalação nova, importe uma vez; pendências são tratadas manualmente.
+  if(firstRun)return migrarTarefasLegadas_();
+  return {copiadas:0,concluida:props.getProperty('HUB_ABAS_MIGRADAS_V1_'+PLANILHA_ID)==='sim',avisos:[]};
 }
 function migrarTarefasLegadas() {
   const lock=trava_();
-  try{return preparar_();}finally{lock.releaseLock();}
+  try{iniciarEstrutura_();return migrarTarefasLegadas_();}finally{liberarTrava_(lock);}
 }
 function obterAba() { return planilha_().getSheetByName(ABA); }
 function estruturaPainel() {
   const lock=trava_();
-  try {
-    const migracao=preparar_();
+  try { const migracao=preparar_(true); return estruturaPainel_(migracao); } finally { liberarTrava_(lock); }
+}
+function estruturaPainel_(migracao) {
     const aba=planilha_().getSheetByName(ESPACOS_ABA);
     const espacos=aba.getLastRow()<2?[]:aba.getRange(2,1,aba.getLastRow()-1,3).getValues().map(r=>({
       id:String(r[0]),nome:String(r[1]),fixo:r[2]===true||String(r[2])==='true'
@@ -231,15 +242,17 @@ function estruturaPainel() {
       id:q.id,espacoId:q.espacoId,nome:q.nome,cor:q.cor,
       aba:q.aba,abaUrl:ss.getUrl()+'#gid='+abaQuadro_(q.id).getSheetId()
     })),migracao};
-  }finally{lock.releaseLock();}
 }
+
 function listarTarefas() {
   const lock=trava_();
-  try {
-    preparar_();
+  try { preparar_(true); return listarTarefas_(); } finally { liberarTrava_(lock); }
+}
+function listarTarefas_() {
     const tarefas=[];
     obterQuadros_().forEach(q=>{
-      const aba=abaQuadro_(q.id);
+      const aba=planilha_().getSheetByName(q.aba);
+      if(!aba)throw new Error('Aba do quadro não encontrada: '+q.nome);
       const n=aba.getLastRow();
       if(n<2)return;
       aba.getRange(2,1,n-1,8).getValues().forEach((r,i)=>{
@@ -258,7 +271,15 @@ function listarTarefas() {
       });
     });
     return tarefas;
-  }finally{lock.releaseLock();}
+}
+
+// Uma leitura coerente, com uma única preparação e um único bloqueio.
+function sincronizarPainel() {
+  const lock=trava_();
+  try {
+    const migracao=preparar_(true);
+    return {estrutura:estruturaPainel_(migracao),tarefas:listarTarefas_(),detalhes:listarDetalhesCards_()};
+  } finally { liberarTrava_(lock); }
 }
 function localizarCard_(id,quadroId) {
   const aba=abaQuadro_(quadroId||QUADRO_PADRAO);
@@ -276,7 +297,7 @@ function atualizarStatus(id,status,quadroId) {
     const x=localizarCard_(id,quadroId);
     x.aba.getRange(x.linha,7).setValue(status);
     return {sucesso:true};
-  }finally{lock.releaseLock();}
+  }finally{liberarTrava_(lock);}
 }
 function atualizarResponsavel(id,nome,quadroId) {
   if(!RESPONSAVEIS_FIXOS.includes(nome))throw new Error('Responsável inválido');
@@ -286,7 +307,7 @@ function atualizarResponsavel(id,nome,quadroId) {
     const x=localizarCard_(id,quadroId);
     x.aba.getRange(x.linha,4).setValue(nome);
     return {sucesso:true};
-  }finally{lock.releaseLock();}
+  }finally{liberarTrava_(lock);}
 }
 function salvarTarefa(dados) {
   if(!dados||typeof dados!=='object')throw new Error('Dados inválidos');
@@ -312,7 +333,7 @@ function salvarTarefa(dados) {
       titulo,descricao,responsavel,solicitante,prioridade,status,dt
     ]]);
     return {sucesso:true};
-  }finally{lock.releaseLock();}
+  }finally{liberarTrava_(lock);}
 }
 function criarEspaco(nome) {
   nome=String(nome||'').trim();
@@ -323,7 +344,7 @@ function criarEspaco(nome) {
     const id=Utilities.getUuid();
     planilha_().getSheetByName(ESPACOS_ABA).appendRow([id,nome,false]);
     return {id,nome,fixo:false};
-  }finally{lock.releaseLock();}
+  }finally{liberarTrava_(lock);}
 }
 function criarQuadro(dados) {
   const nome=String(dados&&dados.nome||'').trim();
@@ -345,9 +366,10 @@ function criarQuadro(dados) {
     const aba=obterOuCriar_(abaNome,CAMPOS_TAREFA);
     planilha_().getSheetByName(QUADROS_ABA).appendRow([id,espacoId,nome,cor,'',abaNome]);
     const listas=planilha_().getSheetByName(LISTAS_ABA);
-    LISTAS_PADRAO.forEach((c,i)=>listas.appendRow([id,c[0],c[1],c[2],i+1]));
+    const linhas=LISTAS_PADRAO.map((c,i)=>[id,c[0],c[1],c[2],i+1]);
+    listas.getRange(listas.getLastRow()+1,1,linhas.length,5).setValues(linhas);
     return {id,espacoId,nome,cor,aba:abaNome,abaUrl:planilha_().getUrl()+'#gid='+aba.getSheetId()};
-  }finally{lock.releaseLock();}
+  }finally{liberarTrava_(lock);}
 }
 function criarTarefa(dados) {
   const titulo=String(dados&&dados.titulo||'').trim();
@@ -360,7 +382,7 @@ function criarTarefa(dados) {
     const id=Utilities.getUuid();
     aba.appendRow([id,titulo,'','','','Média','Backlog',new Date()]);
     return {sucesso:true,id};
-  }finally{lock.releaseLock();}
+  }finally{liberarTrava_(lock);}
 }
 function resolverAbaExistente_(valor) {
   const raw=String(valor||'').trim();
@@ -394,7 +416,7 @@ function configurarAbaQuadro(dados) {
     const copiadas=antiga.getSheetId()===destino.getSheetId()?0:copiarSemDuplicar_(antiga,destino,quadroId,false);
     planilha_().getSheetByName(QUADROS_ABA).getRange(q.linha,6).setValue(destino.getName());
     return {sucesso:true,aba:destino.getName(),abaUrl:planilha_().getUrl()+'#gid='+destino.getSheetId(),copiadas};
-  }finally{lock.releaseLock();}
+  }finally{liberarTrava_(lock);}
 }
 function gerarIdsPendentes() {return listarTarefas();}
 function testarConexao() {
@@ -445,7 +467,7 @@ function excluirTarefa(dados) {
     x.aba.deleteRow(x.linha);
     limparDetalhes_(quadroId,id);
     return {sucesso:true,id};
-  }finally{lock.releaseLock();}
+  }finally{liberarTrava_(lock);}
 }
 /** Exclui quadro, tarefas e a aba exclusiva, após validação de propriedade. */
 function excluirQuadro(quadroId) {
@@ -469,7 +491,7 @@ function excluirQuadro(quadroId) {
     if(listas&&listas.getLastRow()>1){const v=listas.getRange(2,1,listas.getLastRow()-1,1).getValues();for(let i=v.length-1;i>=0;i--)if(String(v[i][0])===quadroId)listas.deleteRow(i+2);}
     ss.deleteSheet(tab);
     return {sucesso:true,id:quadroId};
-  }finally{lock.releaseLock();}
+  }finally{liberarTrava_(lock);}
 }
 /** Exclui espaço e todos os quadros e abas associados (cascata). */
 function excluirEspaco(espacoId) {
@@ -496,7 +518,7 @@ function excluirEspaco(espacoId) {
     attached.forEach(q=>ss.deleteSheet(ss.getSheetByName(q.aba)));
     esp.deleteRow(pos+2);
     return {sucesso:true,id:espacoId,quadrosExcluidos:attached.length};
-  }finally{lock.releaseLock();}
+  }finally{liberarTrava_(lock);}
 }
 /** Renomeia quadro mantendo o nome da aba e a associação da planilha. */
 function renomearQuadro(dados) {
@@ -509,7 +531,7 @@ function renomearQuadro(dados) {
     if(!q)throw new Error('Quadro não encontrado.');
     planilha_().getSheetByName(QUADROS_ABA).getRange(q.linha,3).setValue(nome);
     return {sucesso:true,id,nome};
-  }finally{lock.releaseLock();}
+  }finally{liberarTrava_(lock);}
 }
 function renomearEspaco(dados) {
   const id=String(dados&&dados.id||''),nome=String(dados&&dados.nome||'').trim();
@@ -523,7 +545,7 @@ function renomearEspaco(dados) {
     if(idx<0)throw new Error('Espaço não encontrado.');
     sheet.getRange(idx+2,2).setValue(nome);
     return {sucesso:true,id,nome};
-  }finally{lock.releaseLock();}
+  }finally{liberarTrava_(lock);}
 }
 
 
@@ -558,7 +580,7 @@ function salvarLista(dados) {
       }
     }else sheet.appendRow([quadroId,key,name,color,ordem]);
     return {sucesso:true,quadroId,key,name,color,ordem};
-  }finally{lock.releaseLock();}
+  }finally{liberarTrava_(lock);}
 }
 function excluirLista(dados) {
   const quadroId=String(dados&&dados.quadroId||'').trim(),key=String(dados&&dados.key||'').trim();
@@ -584,7 +606,7 @@ function excluirLista(dados) {
     }
     sheet.deleteRow(i+2);
     return {sucesso:true,deleted};
-  }finally{lock.releaseLock();}
+  }finally{liberarTrava_(lock);}
 }
 
 
@@ -594,8 +616,9 @@ function excluirLista(dados) {
  */
 function listarDetalhesCards() {
   const lock=trava_();
-  try{
-    preparar_();
+  try { preparar_(true); return listarDetalhesCards_(); } finally { liberarTrava_(lock); }
+}
+function listarDetalhesCards_() {
     const ss=planilha_(),data=new Map();
     const entry=(q,id)=>{
       const key=q+'::'+id;
@@ -635,16 +658,19 @@ function listarDetalhesCards() {
       });
     }
     return Array.from(data.values()).map(x=>({...x,chk:x.chk.sort((a,b)=>a.ordem-b.ordem).map(({ordem,...r})=>r)}));
-  }finally{lock.releaseLock();}
 }
+
 function limparDetalhes_(quadroId,cardId) {
   const ss=planilha_();
   [CHECKLIST_ABA,COMENTARIOS_ABA,CRONOMETROS_ABA].forEach(name=>{
     const tab=ss.getSheetByName(name);
     if(!tab||tab.getLastRow()<2)return;
     const vals=tab.getRange(2,1,tab.getLastRow()-1,2).getValues();
-    for(let i=vals.length-1;i>=0;i--){
-      if(String(vals[i][0])===String(quadroId)&&(!cardId||String(vals[i][1])===String(cardId)))tab.deleteRow(i+2);
+    for(let i=vals.length-1;i>=0;){
+      const match=r=>String(r[0])===String(quadroId)&&(!cardId||String(r[1])===String(cardId));
+      if(!match(vals[i])){i--;continue;}
+      const end=i;while(i>=0&&match(vals[i]))i--;
+      tab.deleteRows(i+3,end-i);
     }
   });
 }
@@ -661,11 +687,13 @@ function salvarDetalhesCard(dados) {
     limparDetalhes_(q,id);
     const ss=planilha_();
     const tabChk=ss.getSheetByName(CHECKLIST_ABA);
-    checks.forEach((c,i)=>{if(String(c.t||'').trim())tabChk.appendRow([q,id,String(c.id||Utilities.getUuid()),String(c.t||''),!!c.d,i+1]);});
+    const chkRows=checks.filter(c=>String(c.t||'').trim()).map((c,i)=>[q,id,String(c.id||Utilities.getUuid()),String(c.t||''),!!c.d,i+1]);
+    if(chkRows.length)tabChk.getRange(tabChk.getLastRow()+1,1,chkRows.length,6).setValues(chkRows);
     const tabCm=ss.getSheetByName(COMENTARIOS_ABA);
-    comments.forEach(c=>{if(String(c.text||'').trim())tabCm.appendRow([q,id,String(c.id||Utilities.getUuid()),String(c.author||''),String(c.at||''),String(c.text||'')]);});
+    const cmRows=comments.filter(c=>String(c.text||'').trim()).map(c=>[q,id,String(c.id||Utilities.getUuid()),String(c.author||''),String(c.at||''),String(c.text||'')]);
+    if(cmRows.length)tabCm.getRange(tabCm.getLastRow()+1,1,cmRows.length,6).setValues(cmRows);
     const elapsed=Math.max(0,Number(dados.elapsedMs)||0),since=Number(dados.runningSince)||'';
     if(elapsed||since)ss.getSheetByName(CRONOMETROS_ABA).appendRow([q,id,elapsed,since]);
     return {sucesso:true};
-  }finally{lock.releaseLock();}
+  }finally{liberarTrava_(lock);}
 }
