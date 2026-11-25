@@ -1216,7 +1216,9 @@ let alphaShadow = new Map();
 let alphaListsShadow = new Map();
 let alphaDetailsShadow = new Map();
 const ALPHA_DETAILS_MIGRATION_KEY="alpha-details-migrated-v1";
+const ALPHA_LISTS_MIGRATION_KEY="alpha-lists-migrated-v1";
 let alphaNeedsDetailMigration=false;
+let alphaNeedsListMigration=false;
 function alphaDetailId(){return "detail-"+Date.now()+"-"+Math.random().toString(36).slice(2,9);}
 function alphaCanonicalDetails(card){
  const chk=(card.chk||[]).map(c=>{if(!c.id)c.id=alphaDetailId();return{id:String(c.id),t:String(c.t||""),d:!!c.d};});
@@ -1267,6 +1269,8 @@ function alphaCanonical(card) {
 function alphaApplyPayload(estrutura,tarefas,detalhes=[]) {
   const previous=painelData && Array.isArray(painelData.boards)?painelData.boards:[];
   const oldBoards=new Map(previous.map(b=>[b._remoteId||b.id,b]));
+  const migrateOldLists=!store.get(ALPHA_LISTS_MIGRATION_KEY,false);
+  let hasOldLists=false;
   const oldCards=new Map();
   previous.forEach(b=>(b.cards||[]).forEach(c=>oldCards.set((b._remoteId||b.id)+"::"+c.id,c)));
   const remoteEnvs=new Map();
@@ -1280,6 +1284,12 @@ function alphaApplyPayload(estrutura,tarefas,detalhes=[]) {
     const id=ALPHA_FIXED_IDS[q.id]||q.id;
     const old=oldBoards.get(q.id)||oldBoards.get(id);
     const listed=Array.isArray(estrutura.listas)?estrutura.listas.filter(x=>x.quadroId===q.id).sort((a,b)=>a.ordem-b.ordem).map(x=>({key:x.key,name:x.name,color:x.color,ordem:x.ordem})):null;
+    if(listed!==null && migrateOldLists && old?.lists){
+      old.lists.filter(l=>!listed.some(c=>c.key===l.key)&&!l.implicit).forEach(l=>{
+        // Migra somente listas que não existem nas abas de configuração.
+        listed.push({...l});hasOldLists=true;
+      });
+    }
     return {
       id,_remoteId:q.id,envId:remoteEnvs.get(q.espacoId)||"env-gov-aprendizes",
       title:q.nome,color:old?.color||q.cor||"#00DBFF",
@@ -1296,7 +1306,11 @@ function alphaApplyPayload(estrutura,tarefas,detalhes=[]) {
   const newDetailsShadow=new Map();
   const newShadow=new Map();
   const newListsShadow=new Map();
-  boards.forEach(b=>b.lists.forEach((c,i)=>newListsShadow.set(b._remoteId+"::"+c.key,{name:c.name,color:c.color,ordem:i+1})));
+  const existingListKeys=new Set((estrutura.listas||[]).map(l=>l.quadroId+"::"+l.key));
+  boards.forEach(b=>b.lists.forEach((c,i)=>{
+    const key=b._remoteId+"::"+c.key;
+    if(existingListKeys.has(key))newListsShadow.set(key,{name:c.name,color:c.color,ordem:i+1});
+  }));
   const previousOrder=new Map();
   previous.forEach(b=>(b.cards||[]).forEach((c,i)=>previousOrder.set((b._remoteId||b.id)+"::"+c.id,i)));
   (tarefas||[]).forEach(t=>{
@@ -1355,11 +1369,15 @@ function alphaApplyPayload(estrutura,tarefas,detalhes=[]) {
   alphaDetailsShadow=newDetailsShadow;
   savePainelData();
   if(migrateOldDetails){
-    if(hasOldNotes){
-      alphaNeedsDetailMigration=true;
-      setTimeout(()=>{if(!alphaPersistRunning&&!alphaPersistTimer)persistBoardToServer("");},50);
-    } else store.set(ALPHA_DETAILS_MIGRATION_KEY,true);
+    if(hasOldNotes)alphaNeedsDetailMigration=true;
+    else store.set(ALPHA_DETAILS_MIGRATION_KEY,true);
   }
+  if(migrateOldLists){
+    if(hasOldLists)alphaNeedsListMigration=true;
+    else store.set(ALPHA_LISTS_MIGRATION_KEY,true);
+  }
+  if(alphaNeedsDetailMigration||alphaNeedsListMigration)
+    setTimeout(()=>{if(!alphaPersistRunning&&!alphaPersistTimer)persistBoardToServer("");},50);
   updateSyncIndicator();
   if(currentRoute==="painel-totvs")renderPainelHub();
   if(currentRoute==="painel-board") {
@@ -1489,6 +1507,7 @@ async function alphaFlush() {
     }
     savePainelData();
     if(alphaNeedsDetailMigration){store.set(ALPHA_DETAILS_MIGRATION_KEY,true);alphaNeedsDetailMigration=false;}
+    if(alphaNeedsListMigration){store.set(ALPHA_LISTS_MIGRATION_KEY,true);alphaNeedsListMigration=false;}
   }catch(e) {
     toast("Não foi possível salvar no Google Sheets: "+(e.message||e));
     console.error("HUB ALPHA salvar:",e);
