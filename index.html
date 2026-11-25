@@ -1250,7 +1250,8 @@ function alphaDate(d) {
 function alphaSheetStatus(card) {
  if(ALPHA_STATUS_TO_SHEET[card.col])return ALPHA_STATUS_TO_SHEET[card.col];
  const board=painelData.boards.find(b=>b.id===card._boardId||b._remoteId===card._boardId);
- return board?.lists?.find(l=>l.key===card.col)?.name||card._lastSheetStatus||"Backlog";
+ const list=board?.lists?.find(l=>l.key===card.col);
+ return list?.implicit?(card._lastSheetStatus||"Backlog"):(list?.name||card._lastSheetStatus||"Backlog");
 }
 function alphaCanonical(card) {
   return {
