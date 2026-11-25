@@ -9,6 +9,9 @@ const ABA = 'Tarefas';
 const ESPACOS_ABA = 'Espacos';
 const QUADROS_ABA = 'Quadros';
 const LISTAS_ABA = 'Listas';
+const CHECKLIST_ABA = 'Checklist';
+const COMENTARIOS_ABA = 'Comentarios';
+const CRONOMETROS_ABA = 'Cronometros';
 const ESPACO_FIXO = 'nucleo-aprendizagem';
 const ESPACO_PESSOAL = 'meus-quadros';
 const QUADRO_PADRAO = 'quadro-administrativo';
@@ -51,6 +54,9 @@ function iniciarEstrutura_() {
   const espacos=obterOuCriar_(ESPACOS_ABA,['ID','NOME','FIXO']);
   const quadros=obterOuCriar_(QUADROS_ABA,['ID','ESPACO_ID','NOME','COR','PLANILHA_ID_LEGADO','ABA_TAREFAS']);
   const listas=obterOuCriar_(LISTAS_ABA,['QUADRO_ID','CHAVE','NOME','COR','ORDEM']);
+  obterOuCriar_(CHECKLIST_ABA,['QUADRO_ID','CARD_ID','ITEM_ID','TEXTO','CONCLUIDO','ORDEM']);
+  obterOuCriar_(COMENTARIOS_ABA,['QUADRO_ID','CARD_ID','COMENTARIO_ID','AUTOR','DATA','TEXTO']);
+  obterOuCriar_(CRONOMETROS_ABA,['QUADRO_ID','CARD_ID','TEMPO_MS','INICIO_TS']);
   // Após a primeira inicialização, excluir todas as linhas NÃO recria dados padrão.
   const bootstrap=PropertiesService.getScriptProperties();
   const initialized='HUB_ESTRUTURA_INICIALIZADA_'+PLANILHA_ID;
@@ -94,7 +100,7 @@ function iniciarEstrutura_() {
       if(!String(l[1]||'').trim()&&defaultEspaco){l[1]=defaultEspaco;alterou=true;}
     });
     const usados=new Set();
-    const reservados=new Set([ABA,ESPACOS_ABA,QUADROS_ABA,LISTAS_ABA]);
+    const reservados=new Set([ABA,ESPACOS_ABA,QUADROS_ABA,LISTAS_ABA,CHECKLIST_ABA,COMENTARIOS_ABA,CRONOMETROS_ABA]);
     linhas.forEach((linha,i)=>{
       if(!String(linha[2]||'').trim())return;
       let nome=String(linha[5]||'').trim();
@@ -368,7 +374,7 @@ function configurarAbaQuadro(dados) {
     const q=obterQuadros_().find(x=>x.id===quadroId);
     if(!q)throw new Error('Quadro inexistente');
     const destino=resolverAbaExistente_(dados&&dados.aba);
-    if([ABA,ESPACOS_ABA,QUADROS_ABA,LISTAS_ABA].includes(destino.getName()))throw new Error('Aba reservada para configurações ou backup.');
+    if([ABA,ESPACOS_ABA,QUADROS_ABA,LISTAS_ABA,CHECKLIST_ABA,COMENTARIOS_ABA,CRONOMETROS_ABA].includes(destino.getName()))throw new Error('Aba reservada para configurações ou backup.');
     if(obterQuadros_().some(x=>x.id!==quadroId&&x.aba===destino.getName()))throw new Error('Essa aba já pertence a outro quadro.');
     validarCabecalho_(destino);
     const antiga=abaQuadro_(quadroId);
@@ -424,6 +430,7 @@ function excluirTarefa(dados) {
     preparar_();
     const x=localizarCard_(id,quadroId);
     x.aba.deleteRow(x.linha);
+    limparDetalhes_(quadroId,id);
     return {sucesso:true,id};
   }finally{lock.releaseLock();}
 }
@@ -440,10 +447,11 @@ function excluirQuadro(quadroId) {
     const tab=ss.getSheetByName(q.aba);
     const usedElsewhere=obterQuadros_().some(x=>x.id!==q.id&&x.aba===q.aba);
     if(usedElsewhere)throw new Error('A aba também está vinculada a outro quadro.');
-    if([ABA,ESPACOS_ABA,QUADROS_ABA,LISTAS_ABA].includes(q.aba))throw new Error('Aba de configuração reservada.');
+    if([ABA,ESPACOS_ABA,QUADROS_ABA,LISTAS_ABA,CHECKLIST_ABA,COMENTARIOS_ABA,CRONOMETROS_ABA].includes(q.aba))throw new Error('Aba de configuração reservada.');
     // Nunca exclui aba sem a confirmação de que pertence ao quadro.
     if(!tab)throw new Error('Aba vinculada não encontrada. Corrija a planilha antes de excluir.');
     meta.deleteRow(q.linha);
+    limparDetalhes_(quadroId,null);
     const listas=ss.getSheetByName(LISTAS_ABA);
     if(listas&&listas.getLastRow()>1){const v=listas.getRange(2,1,listas.getLastRow()-1,1).getValues();for(let i=v.length-1;i>=0;i--)if(String(v[i][0])===quadroId)listas.deleteRow(i+2);}
     ss.deleteSheet(tab);
@@ -465,10 +473,11 @@ function excluirEspaco(espacoId) {
     for(const q of attached) {
       if(!ss.getSheetByName(q.aba))throw new Error('Aba "'+q.aba+'" não encontrada.');
       if(all.some(other=>other.id!==q.id&&other.aba===q.aba))throw new Error('Aba compartilhada: '+q.aba);
-      if([ABA,ESPACOS_ABA,QUADROS_ABA,LISTAS_ABA].includes(q.aba))throw new Error('Aba reservada: '+q.aba);
+      if([ABA,ESPACOS_ABA,QUADROS_ABA,LISTAS_ABA,CHECKLIST_ABA,COMENTARIOS_ABA,CRONOMETROS_ABA].includes(q.aba))throw new Error('Aba reservada: '+q.aba);
     }
     const metadata=ss.getSheetByName(QUADROS_ABA);
     attached.sort((a,b)=>b.linha-a.linha).forEach(q=>metadata.deleteRow(q.linha));
+    attached.forEach(q=>limparDetalhes_(q.id,null));
     const listas=ss.getSheetByName(LISTAS_ABA);
     if(listas&&listas.getLastRow()>1){const v=listas.getRange(2,1,listas.getLastRow()-1,1).getValues();for(let i=v.length-1;i>=0;i--)if(attached.some(q=>q.id===String(v[i][0])))listas.deleteRow(i+2);}
     attached.forEach(q=>ss.deleteSheet(ss.getSheetByName(q.aba)));
@@ -554,10 +563,96 @@ function excluirLista(dados) {
     if(lastTask>1){
       const values=tab.getRange(2,7,lastTask-1,1).getValues();
       for(let row=values.length-1;row>=0;row--){
-        if(String(values[row][0])===status){tab.deleteRow(row+2);deleted++;}
+        if(String(values[row][0])===status){
+          const cardId=String(tab.getRange(row+2,1).getValue());
+          tab.deleteRow(row+2);limparDetalhes_(quadroId,cardId);deleted++;
+        }
       }
     }
     sheet.deleteRow(i+2);
     return {sucesso:true,deleted};
+  }finally{lock.releaseLock();}
+}
+
+
+/**
+ * As abas Checklist, Comentarios e Cronometros são fontes legíveis/editáveis no Sheets.
+ * IDs são preenchidos automaticamente para itens inseridos diretamente no Sheets.
+ */
+function listarDetalhesCards() {
+  const lock=trava_();
+  try{
+    preparar_();
+    const ss=planilha_(),data=new Map();
+    const entry=(q,id)=>{
+      const key=q+'::'+id;
+      if(!data.has(key))data.set(key,{quadroId:q,id,chk:[],comments:[],elapsedMs:0,runningSince:null});
+      return data.get(key);
+    };
+    const checks=ss.getSheetByName(CHECKLIST_ABA);
+    if(checks&&checks.getLastRow()>1){
+      const rows=checks.getRange(2,1,checks.getLastRow()-1,6).getValues();
+      rows.forEach((r,i)=>{
+        const q=String(r[0]||''),id=String(r[1]||''),txt=String(r[3]||'');
+        if(!q||!id||!txt)return;
+        const itemId=String(r[2]||'')||Utilities.getUuid();
+        if(!r[2])checks.getRange(i+2,3).setValue(itemId);
+        entry(q,id).chk.push({id:itemId,t:txt,d:r[4]===true||String(r[4]).toLowerCase()==='true'||Number(r[4])===1,ordem:Number(r[5])||i+1});
+      });
+    }
+    const comments=ss.getSheetByName(COMENTARIOS_ABA);
+    if(comments&&comments.getLastRow()>1){
+      const rows=comments.getRange(2,1,comments.getLastRow()-1,6).getValues();
+      rows.forEach((r,i)=>{
+        const q=String(r[0]||''),id=String(r[1]||''),txt=String(r[5]||'');
+        if(!q||!id||!txt)return;
+        const itemId=String(r[2]||'')||Utilities.getUuid();
+        if(!r[2])comments.getRange(i+2,3).setValue(itemId);
+        entry(q,id).comments.push({id:itemId,author:String(r[3]||''),at:String(r[4]||''),text:txt});
+      });
+    }
+    const timers=ss.getSheetByName(CRONOMETROS_ABA);
+    if(timers&&timers.getLastRow()>1){
+      timers.getRange(2,1,timers.getLastRow()-1,4).getValues().forEach(r=>{
+        const q=String(r[0]||''),id=String(r[1]||'');
+        if(!q||!id)return;
+        const target=entry(q,id);
+        target.elapsedMs=Math.max(0,Number(r[2])||0);
+        target.runningSince=Number(r[3])||null;
+      });
+    }
+    return Array.from(data.values()).map(x=>({...x,chk:x.chk.sort((a,b)=>a.ordem-b.ordem).map(({ordem,...r})=>r)}));
+  }finally{lock.releaseLock();}
+}
+function limparDetalhes_(quadroId,cardId) {
+  const ss=planilha_();
+  [CHECKLIST_ABA,COMENTARIOS_ABA,CRONOMETROS_ABA].forEach(name=>{
+    const tab=ss.getSheetByName(name);
+    if(!tab||tab.getLastRow()<2)return;
+    const vals=tab.getRange(2,1,tab.getLastRow()-1,2).getValues();
+    for(let i=vals.length-1;i>=0;i--){
+      if(String(vals[i][0])===String(quadroId)&&(!cardId||String(vals[i][1])===String(cardId)))tab.deleteRow(i+2);
+    }
+  });
+}
+function salvarDetalhesCard(dados) {
+  const q=String(dados&&dados.quadroId||''),id=String(dados&&dados.id||'');
+  const checks=Array.isArray(dados&&dados.chk)?dados.chk:[];
+  const comments=Array.isArray(dados&&dados.comments)?dados.comments:[];
+  if(!q||!id||checks.length>300||comments.length>1000)throw new Error('Dados de card inválidos.');
+  if(checks.some(c=>String(c.t||'').length>2000)||comments.some(c=>String(c.text||'').length>6000))throw new Error('Texto demasiado longo.');
+  const lock=trava_();
+  try{
+    preparar_();
+    localizarCard_(id,q);
+    limparDetalhes_(q,id);
+    const ss=planilha_();
+    const tabChk=ss.getSheetByName(CHECKLIST_ABA);
+    checks.forEach((c,i)=>{if(String(c.t||'').trim())tabChk.appendRow([q,id,String(c.id||Utilities.getUuid()),String(c.t||''),!!c.d,i+1]);});
+    const tabCm=ss.getSheetByName(COMENTARIOS_ABA);
+    comments.forEach(c=>{if(String(c.text||'').trim())tabCm.appendRow([q,id,String(c.id||Utilities.getUuid()),String(c.author||''),String(c.at||''),String(c.text||'')]);});
+    const elapsed=Math.max(0,Number(dados.elapsedMs)||0),since=Number(dados.runningSince)||'';
+    if(elapsed||since)ss.getSheetByName(CRONOMETROS_ABA).appendRow([q,id,elapsed,since]);
+    return {sucesso:true};
   }finally{lock.releaseLock();}
 }
