@@ -1429,6 +1429,10 @@ async function alphaFlush() {
               await alphaCall("salvarTarefa",{id:card.id,quadroId:board._remoteId,...payload});
             card._lastSheetStatus=payload.status;
             alphaShadow.set(board._remoteId+"::"+card.id,payload);
+            const details=alphaCanonicalDetails(card);
+            if(details.chk.length||details.comments.length||details.elapsedMs||details.runningSince)
+              await alphaCall("salvarDetalhesCard",{quadroId:board._remoteId,id:card.id,...details});
+            alphaDetailsShadow.set(board._remoteId+"::"+card.id,details);
           } finally {alphaNewCardBusy.delete(pendingId);}
           continue;
         }
@@ -1443,6 +1447,12 @@ async function alphaFlush() {
         else if(statusChanged)await alphaCall("atualizarStatus",card._sheetId,value.status,board._remoteId);
         if(altered||statusChanged) {
           alphaShadow.set(key,value);card._lastSheetStatus=value.status;
+        }
+        const details=alphaCanonicalDetails(card);
+        const beforeDetails=alphaDetailsShadow.get(key)||{chk:[],comments:[],elapsedMs:0,runningSince:null};
+        if(JSON.stringify(details)!==JSON.stringify(beforeDetails)){
+          await alphaCall("salvarDetalhesCard",{quadroId:board._remoteId,id:card._sheetId,...details});
+          alphaDetailsShadow.set(key,details);
         }
       }
     }
@@ -2181,6 +2191,7 @@ async function alphaDeleteCard(board,card){
   if(card._sheetId)await alphaCall("excluirTarefa",{id:card._sheetId,quadroId:board._remoteId});
   board.cards=board.cards.filter(c=>c.id!==card.id);
   alphaShadow.delete(board._remoteId+"::"+card.id);
+  alphaDetailsShadow.delete(board._remoteId+"::"+card.id);
   savePainelData();closeMod();renderActiveBoard();alphaSound("complete");toast("Card excluído da planilha.");
  }catch(e){alphaError(e);}
 }
@@ -2190,7 +2201,7 @@ async function alphaDeleteList(board,list){
  try{
   if(board._remoteId&&!list.implicit)await alphaCall("excluirLista",{quadroId:board._remoteId,key:list.key});
   const removed=board.cards.filter(c=>c.col===list.key);
-  removed.forEach(c=>alphaShadow.delete(board._remoteId+"::"+c.id));
+  removed.forEach(c=>{alphaShadow.delete(board._remoteId+"::"+c.id);alphaDetailsShadow.delete(board._remoteId+"::"+c.id);});
   board.cards=board.cards.filter(c=>c.col!==list.key);
   board.lists=board.lists.filter(l=>l.key!==list.key);
   alphaListsShadow.delete(board._remoteId+"::"+list.key);
@@ -2336,7 +2347,7 @@ function renderActiveBoard() {
         <button type="button" class="kb-del-board" id="kbDelBoardBtn">Excluir quadro</button>
       </div>
     </div>
-    <div style="font-size:11px;color:var(--mute);padding:0 4px 9px">Tarefas, títulos, descrições e status: Google Sheets. Checklists, comentários, cronômetro e personalizações visuais: salvos somente neste navegador.</div>
+    <div style="font-size:11px;color:var(--mute);padding:0 4px 9px">Tarefas, listas, checklists, comentários e cronômetros: sincronizados com Google Sheets. Apenas preferências de aparência ficam neste navegador.</div>
     <div class="kb-board" id="kbBoardCols">
       ${board.lists.map(col => {
         const colColor = col.color || "#00DBFF";
