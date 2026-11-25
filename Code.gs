@@ -76,13 +76,27 @@ function iniciarEstrutura_() {
     }
     bootstrap.setProperty(listasKey,'sim');
   }
+  // Permite criar espaços/quadros diretamente nas abas de configuração sem gerar UUID à mão.
+  if(espacos.getLastRow()>1){
+    const n=espacos.getLastRow()-1,v=espacos.getRange(2,1,n,3).getValues();
+    let dirty=false;
+    v.forEach(row=>{if(!String(row[0]||'').trim()&&String(row[1]||'').trim()){row[0]=Utilities.getUuid();dirty=true;}});
+    if(dirty)espacos.getRange(2,1,n,3).setValues(v);
+  }
   const qtd=quadros.getLastRow()-1;
   if (qtd>0) {
     const linhas=quadros.getRange(2,1,qtd,6).getValues();
+    const defaultEspaco=espacos.getLastRow()>1?String(espacos.getRange(2,1).getValue()):'';
+    let alterou=false;
+    linhas.forEach(l=>{
+      if(!String(l[2]||'').trim())return;
+      if(!String(l[0]||'').trim()){l[0]=Utilities.getUuid();alterou=true;}
+      if(!String(l[1]||'').trim()&&defaultEspaco){l[1]=defaultEspaco;alterou=true;}
+    });
     const usados=new Set();
     const reservados=new Set([ABA,ESPACOS_ABA,QUADROS_ABA,LISTAS_ABA]);
-    let alterou=false;
     linhas.forEach((linha,i)=>{
+      if(!String(linha[2]||'').trim())return;
       let nome=String(linha[5]||'').trim();
       if (!nome || usados.has(nome.toLowerCase()) || reservados.has(nome)) {
         const base=nomeAbaSugerido_(linha[2],linha[0]);
