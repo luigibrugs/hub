@@ -1285,7 +1285,7 @@ function alphaApplyPayload(estrutura,tarefas,detalhes=[]) {
     const old=oldBoards.get(q.id)||oldBoards.get(id);
     const listed=Array.isArray(estrutura.listas)?estrutura.listas.filter(x=>x.quadroId===q.id).sort((a,b)=>a.ordem-b.ordem).map(x=>({key:x.key,name:x.name,color:x.color,ordem:x.ordem})):null;
     if(listed!==null && migrateOldLists && old?.lists){
-      old.lists.filter(l=>!listed.some(c=>c.key===l.key)&&!l.implicit).forEach(l=>{
+      old.lists.filter(l=>!listed.some(c=>c.key===l.key)&&!l.implicit&&!["backlog","progresso","espera","resolvido"].includes(l.key)).forEach(l=>{
         // Migra somente listas que não existem nas abas de configuração.
         listed.push({...l});hasOldLists=true;
       });
@@ -2250,7 +2250,11 @@ async function alphaDeleteCard(board,card){
 async function alphaDeleteList(board,list){
  if(!board||!list)return;
  try{
-  if(board._remoteId&&!list.implicit)await alphaCall("excluirLista",{quadroId:board._remoteId,key:list.key});
+  if(board._remoteId){
+    if(!list.implicit)await alphaCall("excluirLista",{quadroId:board._remoteId,key:list.key});
+    else for(const c of board.cards.filter(c=>c.col===list.key&&c._sheetId))
+      await alphaCall("excluirTarefa",{id:c._sheetId,quadroId:board._remoteId});
+  }
   const removed=board.cards.filter(c=>c.col===list.key);
   removed.forEach(c=>{alphaShadow.delete(board._remoteId+"::"+c.id);alphaDetailsShadow.delete(board._remoteId+"::"+c.id);});
   board.cards=board.cards.filter(c=>c.col!==list.key);
