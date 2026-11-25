@@ -1116,6 +1116,8 @@ function alphaApplyPayload(estrutura,tarefas) {
   });
   const boardMap=new Map(boards.map(b=>[b._remoteId,b]));
   const newShadow=new Map();
+  const previousOrder=new Map();
+  previous.forEach(b=>(b.cards||[]).forEach((c,i)=>previousOrder.set((b._remoteId||b.id)+"::"+c.id,i)));
   (tarefas||[]).forEach(t=>{
     const board=boardMap.get(t.quadroId);
     if(!board)return;
@@ -1133,6 +1135,12 @@ function alphaApplyPayload(estrutura,tarefas) {
     board.cards.push(card);
     newShadow.set(t.quadroId+"::"+t.id,alphaCanonical({...card,col:mapped}));
   });
+  boards.forEach(b=>b.cards.sort((a,c)=>{
+    const aKey=b._remoteId+"::"+a.id,cKey=b._remoteId+"::"+c.id;
+    const aPos=previousOrder.get(aKey)??previousOrder.get(b.id+"::"+a.id)??999999;
+    const cPos=previousOrder.get(cKey)??previousOrder.get(b.id+"::"+c.id)??999999;
+    return aPos-cPos;
+  }));
   // Cards criados localmente permanecem visíveis enquanto aguardam o servidor.
   previous.forEach(old=>{
     const dest=boardMap.get(old._remoteId||old.id)||boards.find(b=>b.id===old.id);
@@ -1160,6 +1168,10 @@ function syncFromGoogleSheet(silent=false) {
     if(!silent)toast("Abra o HUB pelo Google Apps Script para sincronizar.");
     return;
   }
+  if(alphaPersistRunning || alphaPersistTimer) {
+    if(!silent)toast("Salvando alterações antes de sincronizar...");
+    return;
+  }
   alphaLoading=true;
   if(!silent)toast("Sincronizando com Google Sheets...");
   alphaCall("estruturaPainel")
@@ -1176,7 +1188,7 @@ function syncFromGoogleSheet(silent=false) {
 function persistBoardToServer(chatMessage) {
   savePainelData();
   clearTimeout(alphaPersistTimer);
-  alphaPersistTimer=setTimeout(alphaFlush,180);
+  alphaPersistTimer=setTimeout(()=>{alphaPersistTimer=null;alphaFlush();},180);
 }
 async function alphaFlush() {
   if(alphaPersistRunning){alphaPersistAgain=true;return;}
@@ -1190,32 +1202,35 @@ async function alphaFlush() {
     for(const env of painelData.envs) {
       if(env._remoteId||alphaNewEnvBusy.has(env.id))continue;
       alphaNewEnvBusy.add(env.id);
+      const pendingId=env.id;
       try {
         const old=env.id;
         const newEnv=await alphaCall("criarEspaco",env.title);
         env._remoteId=newEnv.id;
         env.id=newEnv.id;
         painelData.boards.forEach(b=>{if(b.envId===old)b.envId=newEnv.id;});
-      }finally{alphaNewEnvBusy.delete(env.id);}
+      }finally{alphaNewEnvBusy.delete(pendingId);}
     }
     for(const board of painelData.boards) {
       if(board._remoteId||alphaNewBoardBusy.has(board.id))continue;
       const env=painelData.envs.find(e=>e.id===board.envId);
       if(!env?._remoteId)continue;
       alphaNewBoardBusy.add(board.id);
+      const pendingId=board.id;
       try {
         const cor=ALPHA_SHEET_COLORS.find(x=>x.toLowerCase()===String(board.color||"").toLowerCase())||ALPHA_SHEET_COLORS[0];
         const result=await alphaCall("criarQuadro",{nome:board.title,espacoId:env._remoteId,cor});
         board._remoteId=result.id;
         if(!result.id)throw new Error("Falha ao criar quadro.");
         board.aba=result.aba;board.abaUrl=result.abaUrl;
-      }finally{alphaNewBoardBusy.delete(board.id);}
+      }finally{alphaNewBoardBusy.delete(pendingId);}
     }
     for(const board of painelData.boards) {
       if(!board._remoteId)continue;
       for(const card of board.cards) {
         if(!card._sheetId && !alphaNewCardBusy.has(card.id)) {
           alphaNewCardBusy.add(card.id);
+          const pendingId=card.id;
           try {
             const result=await alphaCall("criarTarefa",{titulo:card.title,quadroId:board._remoteId});
             card._sheetId=result.id;card.id=result.id;
@@ -1226,7 +1241,7 @@ async function alphaFlush() {
               await alphaCall("salvarTarefa",{id:card.id,quadroId:board._remoteId,...payload});
             card._lastSheetStatus=payload.status;
             alphaShadow.set(board._remoteId+"::"+card.id,payload);
-          } finally {alphaNewCardBusy.delete(card.id);}
+          } finally {alphaNewCardBusy.delete(pendingId);}
           continue;
         }
         if(!card._sheetId)continue;
@@ -2049,6 +2064,7 @@ function renderActiveBoard() {
           <span class="pt-sync-dot ${sheetConnected ? "on" : ""}"></span>
           <span>Sincronizar</span>
         </button>
+        ${board.abaUrl ? `<a href="${esc(board.abaUrl)}" target="_blank" rel="noopener noreferrer" class="pt-sync-btn" style="padding:9px 13px;border-radius:10px;text-decoration:none">↗ Abrir aba</a>` : ""}
         <button type="button" class="kb-new-btn" id="kbNewCardBtn">+ Novo card</button>
         ${!isFixedBoard ? `<button type="button" class="kb-del-board" id="kbDelBoardBtn">Excluir quadro</button>` : ""}
       </div>
