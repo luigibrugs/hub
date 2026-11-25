@@ -8,11 +8,13 @@ const PLANILHA_ID = '16Tu5wve7bFeS0adr0PuUhs0Mf7Jgn6AQEm2Shz0XJQQ';
 const ABA = 'Tarefas';
 const ESPACOS_ABA = 'Espacos';
 const QUADROS_ABA = 'Quadros';
+const LISTAS_ABA = 'Listas';
 const ESPACO_FIXO = 'nucleo-aprendizagem';
 const ESPACO_PESSOAL = 'meus-quadros';
 const QUADRO_PADRAO = 'quadro-administrativo';
 const CAMPOS_TAREFA = ['ID','TÍTULO','DESCRIÇÃO','RESPONSÁVEL','SOLICITANTE','PRIORIDADE','STATUS','DATA'];
 const STATUS_VALIDOS = ['Backlog','Em progresso','Revisão','Concluído'];
+const LISTAS_PADRAO = [['backlog','Backlog','#00DBFF'],['progresso','Em progresso','#A44DFF'],['espera','Revisão','#FF8900'],['resolvido','Concluído','#00FFD4']];
 const RESPONSAVEIS_FIXOS = [
   'Luiz Carlos','Luigi Trintoni','Gabriela Feitosa','Guilherme Crisostomo',
   'Ana Clara','Luiza Santos','Letícia de Souza','Leonardo dos Santos',
@@ -48,6 +50,7 @@ function nomeAbaSugerido_(nome,id) {
 function iniciarEstrutura_() {
   const espacos=obterOuCriar_(ESPACOS_ABA,['ID','NOME','FIXO']);
   const quadros=obterOuCriar_(QUADROS_ABA,['ID','ESPACO_ID','NOME','COR','PLANILHA_ID_LEGADO','ABA_TAREFAS']);
+  const listas=obterOuCriar_(LISTAS_ABA,['QUADRO_ID','CHAVE','NOME','COR','ORDEM']);
   // Após a primeira inicialização, excluir todas as linhas NÃO recria dados padrão.
   const bootstrap=PropertiesService.getScriptProperties();
   const initialized='HUB_ESTRUTURA_INICIALIZADA_'+PLANILHA_ID;
@@ -62,11 +65,22 @@ function iniciarEstrutura_() {
     ['quadro-atendimento',ESPACO_FIXO,'Atendimento VIP - TI','#02c4d4','','Suporte VIP']
   ]);
   quadros.getRange(1,5,1,2).setValues([['PLANILHA_ID_LEGADO','ABA_TAREFAS']]);
+  // Primeira adaptação da planilha: oferece quatro listas para cada quadro existente.
+  // Depois disso, qualquer remoção em Listas será respeitada.
+  const listasKey='HUB_LISTAS_INICIALIZADAS_'+PLANILHA_ID;
+  if(bootstrap.getProperty(listasKey)!=='sim'){
+    if(listas.getLastRow()===1&&quadros.getLastRow()>1){
+      const ids=quadros.getRange(2,1,quadros.getLastRow()-1,1).getValues().flat().map(String);
+      const rows=[];ids.forEach(id=>LISTAS_PADRAO.forEach((c,i)=>rows.push([id,c[0],c[1],c[2],i+1])));
+      if(rows.length)listas.getRange(2,1,rows.length,5).setValues(rows);
+    }
+    bootstrap.setProperty(listasKey,'sim');
+  }
   const qtd=quadros.getLastRow()-1;
   if (qtd>0) {
     const linhas=quadros.getRange(2,1,qtd,6).getValues();
     const usados=new Set();
-    const reservados=new Set([ABA,ESPACOS_ABA,QUADROS_ABA]);
+    const reservados=new Set([ABA,ESPACOS_ABA,QUADROS_ABA,LISTAS_ABA]);
     let alterou=false;
     linhas.forEach((linha,i)=>{
       let nome=String(linha[5]||'').trim();
@@ -178,7 +192,9 @@ function estruturaPainel() {
       id:String(r[0]),nome:String(r[1]),fixo:r[2]===true||String(r[2])==='true'
     }));
     const ss=planilha_();
-    return {espacos,quadros:obterQuadros_().map(q=>({
+    const l=planilha_().getSheetByName(LISTAS_ABA);
+    const listas=l&&l.getLastRow()>1?l.getRange(2,1,l.getLastRow()-1,5).getValues().filter(r=>r[0]&&r[1]).map(r=>({quadroId:String(r[0]),key:String(r[1]),name:String(r[2]),color:String(r[3]||'#00DBFF'),ordem:Number(r[4])||0})):[];
+    return {espacos,listas,quadros:obterQuadros_().map(q=>({
       id:q.id,espacoId:q.espacoId,nome:q.nome,cor:q.cor,
       aba:q.aba,abaUrl:ss.getUrl()+'#gid='+abaQuadro_(q.id).getSheetId()
     })),migracao};
@@ -251,7 +267,7 @@ function salvarTarefa(dados) {
   const t=String(dados.data||'');
   const p=/^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
   if(!id||!titulo||titulo.length>500||descricao.length>10000)throw new Error('Revise o ID, título ou descrição.');
-  if(!STATUS_VALIDOS.includes(status))throw new Error('Status inválido.');
+  if(!status||status.length>80)throw new Error('Status inválido.');
   if(!p)throw new Error('Data inválida.');
   const dt=new Date(Number(p[1]),Number(p[2])-1,Number(p[3]),12);
   if(dt.getFullYear()!==Number(p[1])||dt.getMonth()!==Number(p[2])-1||dt.getDate()!==Number(p[3]))throw new Error('Data inválida.');
@@ -295,6 +311,8 @@ function criarQuadro(dados) {
     while(usados.has(abaNome.toLowerCase()))abaNome=base.slice(0,85)+' '+n++;
     const aba=obterOuCriar_(abaNome,CAMPOS_TAREFA);
     planilha_().getSheetByName(QUADROS_ABA).appendRow([id,espacoId,nome,cor,'',abaNome]);
+    const listas=planilha_().getSheetByName(LISTAS_ABA);
+    LISTAS_PADRAO.forEach((c,i)=>listas.appendRow([id,c[0],c[1],c[2],i+1]));
     return {id,espacoId,nome,cor,aba:abaNome,abaUrl:planilha_().getUrl()+'#gid='+aba.getSheetId()};
   }finally{lock.releaseLock();}
 }
@@ -336,7 +354,7 @@ function configurarAbaQuadro(dados) {
     const q=obterQuadros_().find(x=>x.id===quadroId);
     if(!q)throw new Error('Quadro inexistente');
     const destino=resolverAbaExistente_(dados&&dados.aba);
-    if([ABA,ESPACOS_ABA,QUADROS_ABA].includes(destino.getName()))throw new Error('Aba reservada para configurações ou backup.');
+    if([ABA,ESPACOS_ABA,QUADROS_ABA,LISTAS_ABA].includes(destino.getName()))throw new Error('Aba reservada para configurações ou backup.');
     if(obterQuadros_().some(x=>x.id!==quadroId&&x.aba===destino.getName()))throw new Error('Essa aba já pertence a outro quadro.');
     validarCabecalho_(destino);
     const antiga=abaQuadro_(quadroId);
@@ -408,10 +426,12 @@ function excluirQuadro(quadroId) {
     const tab=ss.getSheetByName(q.aba);
     const usedElsewhere=obterQuadros_().some(x=>x.id!==q.id&&x.aba===q.aba);
     if(usedElsewhere)throw new Error('A aba também está vinculada a outro quadro.');
-    if([ABA,ESPACOS_ABA,QUADROS_ABA].includes(q.aba))throw new Error('Aba de configuração reservada.');
+    if([ABA,ESPACOS_ABA,QUADROS_ABA,LISTAS_ABA].includes(q.aba))throw new Error('Aba de configuração reservada.');
     // Nunca exclui aba sem a confirmação de que pertence ao quadro.
     if(!tab)throw new Error('Aba vinculada não encontrada. Corrija a planilha antes de excluir.');
     meta.deleteRow(q.linha);
+    const listas=ss.getSheetByName(LISTAS_ABA);
+    if(listas&&listas.getLastRow()>1){const v=listas.getRange(2,1,listas.getLastRow()-1,1).getValues();for(let i=v.length-1;i>=0;i--)if(String(v[i][0])===quadroId)listas.deleteRow(i+2);}
     ss.deleteSheet(tab);
     return {sucesso:true,id:quadroId};
   }finally{lock.releaseLock();}
@@ -431,10 +451,12 @@ function excluirEspaco(espacoId) {
     for(const q of attached) {
       if(!ss.getSheetByName(q.aba))throw new Error('Aba "'+q.aba+'" não encontrada.');
       if(all.some(other=>other.id!==q.id&&other.aba===q.aba))throw new Error('Aba compartilhada: '+q.aba);
-      if([ABA,ESPACOS_ABA,QUADROS_ABA].includes(q.aba))throw new Error('Aba reservada: '+q.aba);
+      if([ABA,ESPACOS_ABA,QUADROS_ABA,LISTAS_ABA].includes(q.aba))throw new Error('Aba reservada: '+q.aba);
     }
     const metadata=ss.getSheetByName(QUADROS_ABA);
     attached.sort((a,b)=>b.linha-a.linha).forEach(q=>metadata.deleteRow(q.linha));
+    const listas=ss.getSheetByName(LISTAS_ABA);
+    if(listas&&listas.getLastRow()>1){const v=listas.getRange(2,1,listas.getLastRow()-1,1).getValues();for(let i=v.length-1;i>=0;i--)if(attached.some(q=>q.id===String(v[i][0])))listas.deleteRow(i+2);}
     attached.forEach(q=>ss.deleteSheet(ss.getSheetByName(q.aba)));
     esp.deleteRow(pos+2);
     return {sucesso:true,id:espacoId,quadrosExcluidos:attached.length};
@@ -465,5 +487,63 @@ function renomearEspaco(dados) {
     if(idx<0)throw new Error('Espaço não encontrado.');
     sheet.getRange(idx+2,2).setValue(nome);
     return {sucesso:true,id,nome};
+  }finally{lock.releaseLock();}
+}
+
+
+/** Lista/coluna Kanban editável pela aba Listas do Google Sheets. */
+function salvarLista(dados) {
+  const quadroId=String(dados&&dados.quadroId||'').trim(),key=String(dados&&dados.key||'').trim();
+  const name=String(dados&&dados.name||'').trim();
+  const color=String(dados&&dados.color||'#00DBFF');
+  const ordem=Number(dados&&dados.ordem)||1;
+  if(!quadroId||!key||!name||key.length>90||name.length>80)throw new Error('Dados inválidos da lista.');
+  if(!/^#[0-9a-fA-F]{6}$/.test(color))throw new Error('Cor inválida.');
+  const lock=trava_();
+  try{
+    preparar_();
+    if(!obterQuadros_().some(q=>q.id===quadroId))throw new Error('Quadro não encontrado.');
+    const sheet=planilha_().getSheetByName(LISTAS_ABA);
+    const last=sheet.getLastRow();
+    const rows=last>1?sheet.getRange(2,1,last-1,5).getValues():[];
+    const index=rows.findIndex(r=>String(r[0])===quadroId&&String(r[1])===key);
+    if(rows.some((r,i)=>i!==index&&String(r[0])===quadroId&&String(r[2]).toLowerCase()===name.toLowerCase()))throw new Error('Nome de lista já usado.');
+    if(index>=0){
+      const oldName=String(rows[index][2]);
+      sheet.getRange(index+2,1,1,5).setValues([[quadroId,key,name,color,ordem]]);
+      if(oldName!==name&&!['backlog','progresso','espera','resolvido'].includes(key)){
+        const tasks=abaQuadro_(quadroId),n=tasks.getLastRow();
+        if(n>1){
+          const st=tasks.getRange(2,7,n-1,1),v=st.getValues();
+          let changed=false;
+          v.forEach(r=>{if(String(r[0])===oldName){r[0]=name;changed=true;}});
+          if(changed)st.setValues(v);
+        }
+      }
+    }else sheet.appendRow([quadroId,key,name,color,ordem]);
+    return {sucesso:true,quadroId,key,name,color,ordem};
+  }finally{lock.releaseLock();}
+}
+function excluirLista(dados) {
+  const quadroId=String(dados&&dados.quadroId||'').trim(),key=String(dados&&dados.key||'').trim();
+  const lock=trava_();
+  try{
+    preparar_();
+    const sheet=planilha_().getSheetByName(LISTAS_ABA),last=sheet.getLastRow();
+    const rows=last>1?sheet.getRange(2,1,last-1,5).getValues():[];
+    const i=rows.findIndex(r=>String(r[0])===quadroId&&String(r[1])===key);
+    if(i<0)throw new Error('Lista não encontrada.');
+    const name=String(rows[i][2]);
+    const status={backlog:'Backlog',progresso:'Em progresso',espera:'Revisão',resolvido:'Concluído'}[key]||name;
+    const tab=abaQuadro_(quadroId),lastTask=tab.getLastRow();
+    let deleted=0;
+    if(lastTask>1){
+      const values=tab.getRange(2,7,lastTask-1,1).getValues();
+      for(let row=values.length-1;row>=0;row--){
+        if(String(values[row][0])===status){tab.deleteRow(row+2);deleted++;}
+      }
+    }
+    sheet.deleteRow(i+2);
+    return {sucesso:true,deleted};
   }finally{lock.releaseLock();}
 }
