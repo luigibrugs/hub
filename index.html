@@ -1104,10 +1104,10 @@ function alphaApplyPayload(estrutura,tarefas) {
   });
   const boards=(estrutura.quadros||[]).map(q=>{
     const id=ALPHA_FIXED_IDS[q.id]||q.id;
-    const old=oldBoards.get(q.id);
+    const old=oldBoards.get(q.id)||oldBoards.get(id);
     return {
       id,_remoteId:q.id,envId:remoteEnvs.get(q.espacoId)||"env-gov-aprendizes",
-      title:q.nome,color:old?.color||q.cor||"#00DBFF",
+      title:old?.title||q.nome,color:old?.color||q.cor||"#00DBFF",
       cover:old?.cover||BOARD_COVERS[0].css,
       fixed:!!ALPHA_FIXED_IDS[q.id],aba:q.aba,abaUrl:q.abaUrl,
       lists:old?.lists?.length?old.lists:JSON.parse(JSON.stringify(DEFAULT_KB_COLS)),
@@ -1119,7 +1119,7 @@ function alphaApplyPayload(estrutura,tarefas) {
   (tarefas||[]).forEach(t=>{
     const board=boardMap.get(t.quadroId);
     if(!board)return;
-    const old=oldCards.get(t.quadroId+"::"+t.id);
+    const old=oldCards.get(t.quadroId+"::"+t.id)||oldCards.get(board.id+"::"+t.id);
     const mapped=ALPHA_STATUS_FROM_SHEET[t.status]||"backlog";
     const card={
       id:t.id,_sheetId:t.id,col:old && old._lastSheetStatus===t.status?old.col:mapped,
@@ -1135,7 +1135,7 @@ function alphaApplyPayload(estrutura,tarefas) {
   });
   // Cards criados localmente permanecem visíveis enquanto aguardam o servidor.
   previous.forEach(old=>{
-    const dest=boardMap.get(old._remoteId||old.id);
+    const dest=boardMap.get(old._remoteId||old.id)||boards.find(b=>b.id===old.id);
     if(!dest)return;
     (old.cards||[]).filter(c=>!c._sheetId).forEach(c=>{
       if(!dest.cards.some(x=>x.id===c.id))dest.cards.push(c);
@@ -2037,7 +2037,7 @@ function renderActiveBoard() {
     <div class="kb-top">
       <div class="kb-title-wrap">
         <span class="kb-dot" style="background:${board.color || "#00DBFF"}"></span>
-        <h2 class="kb-title" id="kbBoardTitle" contenteditable="true" spellcheck="false" title="Clique para renomear o quadro">${esc(board.title)}</h2>
+        <h2 class="kb-title" id="kbBoardTitle" contenteditable="true" spellcheck="false" title="Nome visual do quadro (somente neste dispositivo)">${esc(board.title)}</h2>
         ${env ? `<span class="kb-env-tag">${esc(env.title)}</span>` : ""}
       </div>
       <div class="kb-tools">
@@ -2053,6 +2053,7 @@ function renderActiveBoard() {
         ${!isFixedBoard ? `<button type="button" class="kb-del-board" id="kbDelBoardBtn">Excluir quadro</button>` : ""}
       </div>
     </div>
+    <div style="font-size:11px;color:var(--mute);padding:0 4px 9px">Tarefas, títulos, descrições e status: Google Sheets. Checklists, comentários, cronômetro e personalizações visuais: salvos somente neste navegador.</div>
     <div class="kb-board" id="kbBoardCols">
       ${board.lists.map(col => {
         const colColor = col.color || "#00DBFF";
@@ -2577,10 +2578,7 @@ kbWrap.addEventListener("click", e => {
     const board = painelData.boards.find(b => b.id === activeBoardId);
     if (!board || board.fixed) return toast("Este quadro é fixo e não pode ser excluído");
     return confirmActionModal(`Excluir quadro "${board.title}"?`, "Todos os cards e listas deste quadro serão removidos.", "Excluir quadro", () => {
-      painelData.boards = painelData.boards.filter(b => b.id !== activeBoardId);
-      persistBoardToServer("");
-      toast("Quadro excluído");
-      navigate("painel-totvs");
+      toast("Para excluir um quadro vinculado, remova sua configuração na aba Quadros do Google Sheets.");
     });
   }
   if (e.target.closest("#kbOpenNewList")) {
@@ -2600,11 +2598,11 @@ kbWrap.addEventListener("click", e => {
     const lst = board.lists.find(l => l.key === key);
     if (!lst) return;
     return confirmActionModal(`Excluir lista "${lst.name}"?`, "Todos os cards dentro desta lista também serão removidos.", "Excluir lista", () => {
+      if(board.cards.some(c => c.col === key)) return toast("Mova os cards desta lista antes de excluí-la.");
       board.lists = board.lists.filter(l => l.key !== key);
-      board.cards = board.cards.filter(c => c.col !== key);
       persistBoardToServer("");
       renderActiveBoard();
-      toast("Lista removida");
+      toast("Lista visual removida");
     });
   }
   const qo = e.target.closest("[data-quick-open]");
