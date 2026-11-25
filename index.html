@@ -1196,6 +1196,7 @@ const ALPHA_STATUS_TO_SHEET = {
 };
 const ALPHA_SHEET_COLORS = ["#00b6ce","#8155df","#02c4d4","#cd20a0","#13a889","#ef8e4a"];
 let alphaShadow = new Map();
+let alphaListsShadow = new Map();
 let alphaPersistTimer = null;
 let alphaPersistRunning = false;
 let alphaPersistAgain = false;
@@ -1221,7 +1222,9 @@ function alphaDate(d) {
   return m?m[3]+"-"+m[2]+"-"+m[1]:new Date().toLocaleDateString("en-CA");
 }
 function alphaSheetStatus(card) {
-  return ALPHA_STATUS_TO_SHEET[card.col] || "Backlog";
+ if(ALPHA_STATUS_TO_SHEET[card.col])return ALPHA_STATUS_TO_SHEET[card.col];
+ const board=painelData.boards.find(b=>b.id===card._boardId||b._remoteId===card._boardId);
+ return board?.lists?.find(l=>l.key===card.col)?.name||card._lastSheetStatus||"Backlog";
 }
 function alphaCanonical(card) {
   return {
@@ -1249,26 +1252,30 @@ function alphaApplyPayload(estrutura,tarefas) {
   const boards=(estrutura.quadros||[]).map(q=>{
     const id=ALPHA_FIXED_IDS[q.id]||q.id;
     const old=oldBoards.get(q.id)||oldBoards.get(id);
+    const listed=Array.isArray(estrutura.listas)?estrutura.listas.filter(x=>x.quadroId===q.id).sort((a,b)=>a.ordem-b.ordem).map(x=>({key:x.key,name:x.name,color:x.color,ordem:x.ordem})):null;
     return {
       id,_remoteId:q.id,envId:remoteEnvs.get(q.espacoId)||"env-gov-aprendizes",
       title:q.nome,color:old?.color||q.cor||"#00DBFF",
       cover:old?.cover||BOARD_COVERS[0].css,
       fixed:false,aba:q.aba,abaUrl:q.abaUrl,
-      lists:old?.lists?.length?old.lists:JSON.parse(JSON.stringify(DEFAULT_KB_COLS)),
+      lists:listed!==null?listed:old?.lists?.length?old.lists:JSON.parse(JSON.stringify(DEFAULT_KB_COLS)),
       cards:[]
     };
   });
   const boardMap=new Map(boards.map(b=>[b._remoteId,b]));
   const newShadow=new Map();
+  const newListsShadow=new Map();
+  boards.forEach(b=>b.lists.forEach((c,i)=>newListsShadow.set(b._remoteId+"::"+c.key,{name:c.name,color:c.color,ordem:i+1})));
   const previousOrder=new Map();
   previous.forEach(b=>(b.cards||[]).forEach((c,i)=>previousOrder.set((b._remoteId||b.id)+"::"+c.id,i)));
   (tarefas||[]).forEach(t=>{
     const board=boardMap.get(t.quadroId);
     if(!board)return;
     const old=oldCards.get(t.quadroId+"::"+t.id)||oldCards.get(board.id+"::"+t.id);
-    const mapped=ALPHA_STATUS_FROM_SHEET[t.status]||"backlog";
+    let mapped=ALPHA_STATUS_FROM_SHEET[t.status]||board.lists.find(l=>l.name===t.status)?.key;
+    if(!mapped){mapped="status-"+String(t.status||"").replace(/[^\w-]/g,"-").slice(0,60);if(!board.lists.some(l=>l.key===mapped))board.lists.push({key:mapped,name:String(t.status||"Sem status"),color:"#7395a4",implicit:true});}
     const card={
-      id:t.id,_sheetId:t.id,col:old && old._lastSheetStatus===t.status?old.col:mapped,
+      id:t.id,_sheetId:t.id,_boardId:board.id,col:old && old._lastSheetStatus===t.status?old.col:mapped,
       title:t.titulo,desc:t.descricao,
       who:(t.responsavel||"").split(",").map(v=>v.trim()).filter(Boolean).map(ini),
       due:alphaDate(t.data),chk:old?.chk||[],comments:old?.comments||[],
@@ -1298,6 +1305,7 @@ function alphaApplyPayload(estrutura,tarefas) {
   painelData={envs:[...envs,...extraEnvs.filter(e=>!envs.some(x=>x.id===e.id))],
              boards:[...boards,...extraBoards.filter(b=>!boards.some(x=>x.id===b.id))]};
   alphaShadow=newShadow;
+  alphaListsShadow=newListsShadow;
   savePainelData();
   updateSyncIndicator();
   if(currentRoute==="painel-totvs")renderPainelHub();
@@ -1368,6 +1376,20 @@ async function alphaFlush() {
         if(!result.id)throw new Error("Falha ao criar quadro.");
         board.aba=result.aba;board.abaUrl=result.abaUrl;
       }finally{alphaNewBoardBusy.delete(pendingId);}
+    }
+
+    for(const board of painelData.boards) {
+      if(!board._remoteId)continue;
+      for(let i=0;i<board.lists.length;i++){
+        const col=board.lists[i];if(col.implicit)continue;
+        const key=board._remoteId+"::"+col.key;
+        const before=alphaListsShadow.get(key);
+        const payload={name:col.name,color:col.color,ordem:i+1};
+        if(!before||before.name!==payload.name||before.color!==payload.color||before.ordem!==payload.ordem){
+          await alphaCall("salvarLista",{quadroId:board._remoteId,key:col.key,...payload});
+          alphaListsShadow.set(key,payload);
+        }
+      }
     }
     for(const board of painelData.boards) {
       if(!board._remoteId)continue;
@@ -2130,6 +2152,20 @@ async function alphaDeleteCard(board,card){
   savePainelData();closeMod();renderActiveBoard();alphaSound("complete");toast("Card excluído da planilha.");
  }catch(e){alphaError(e);}
 }
+
+async function alphaDeleteList(board,list){
+ if(!board||!list)return;
+ try{
+  if(board._remoteId&&!list.implicit)await alphaCall("excluirLista",{quadroId:board._remoteId,key:list.key});
+  const removed=board.cards.filter(c=>c.col===list.key);
+  removed.forEach(c=>alphaShadow.delete(board._remoteId+"::"+c.id));
+  board.cards=board.cards.filter(c=>c.col!==list.key);
+  board.lists=board.lists.filter(l=>l.key!==list.key);
+  alphaListsShadow.delete(board._remoteId+"::"+list.key);
+  savePainelData();renderActiveBoard();toast("Lista e "+removed.length+" card(s) excluídos.");
+ }catch(e){alphaError(e);}
+}
+
 async function alphaDeleteBoard(board){
  if(!board)return;
  try{
@@ -2396,7 +2432,7 @@ function submitNewList() {
   addingNewList = false;
   persistBoardToServer("");
   renderActiveBoard();
-  toast("Lista criada: " + name);
+  alphaSound("create");toast("Lista criada: " + name);
 }
 
 function renderKbCard(c, col) {
@@ -2445,6 +2481,7 @@ function submitQuickCard(colKey) {
   if (!board || !txt) { quickAddCol = null; return renderActiveBoard(); }
   const newCard = {
     id: "c-" + Date.now(),
+    _boardId:board.id,
     col: colKey,
     title: txt,
     desc: "",
@@ -2554,7 +2591,7 @@ function openCardModal(cardId, defaultCol) {
   const firstCol = board.lists[0].key;
   const draft = existing
     ? JSON.parse(JSON.stringify(existing))
-    : { id: "c-" + Date.now(), col: defaultCol || firstCol, title: "", desc: "", who: [], _responsavel: "", _solicitante: "", _prioridade: "Média", due: "", chk: [], comments: [], elapsedMs: 0, runningSince: null };
+    : { id: "c-" + Date.now(), _boardId:board.id, col: defaultCol || firstCol, title: "", desc: "", who: [], _responsavel: "", _solicitante: "", _prioridade: "Média", due: "", chk: [], comments: [], elapsedMs: 0, runningSince: null };
 
   const renderModal = () => {
     const elapsed = getCardElapsedMs(draft);
@@ -2847,11 +2884,7 @@ kbWrap.addEventListener("click", e => {
     const lst = board.lists.find(l => l.key === key);
     if (!lst) return;
     return confirmActionModal(`Excluir lista "${lst.name}"?`, "Todos os cards dentro desta lista também serão removidos.", "Excluir lista", () => {
-      if(board.cards.some(c => c.col === key)) return toast("Mova os cards desta lista antes de excluí-la.");
-      board.lists = board.lists.filter(l => l.key !== key);
-      persistBoardToServer("");
-      renderActiveBoard();
-      toast("Lista visual removida");
+      alphaDeleteList(board,lst);
     });
   }
   const qo = e.target.closest("[data-quick-open]");
