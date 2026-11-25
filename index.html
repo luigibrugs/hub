@@ -686,6 +686,10 @@ body.dark .theme-toggle-icon-container { transform: translateX(24px); color: #00
   .bar { left: 94px !important; right: 16px; flex-wrap: wrap; gap: 10px 16px; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* Prioridade é um campo real do Google Sheets, não uma etiqueta visual. */
+.alpha-priority-pill{display:inline-flex;width:max-content;align-items:center;margin:7px 0 3px;padding:4px 9px;border-radius:7px;font-size:10.5px;font-weight:700;letter-spacing:.01em;color:var(--priority-color);background:color-mix(in srgb,var(--priority-color) 11%,transparent);border:1px solid color-mix(in srgb,var(--priority-color) 25%,transparent)}
+.alpha-requester{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10.5px}
 </style>
 </head>
 <body class="auth-lock">
@@ -1125,7 +1129,7 @@ function alphaApplyPayload(estrutura,tarefas) {
     const mapped=ALPHA_STATUS_FROM_SHEET[t.status]||"backlog";
     const card={
       id:t.id,_sheetId:t.id,col:old && old._lastSheetStatus===t.status?old.col:mapped,
-      title:t.titulo,desc:t.descricao,labels:old?.labels||[],
+      title:t.titulo,desc:t.descricao,
       who:old?.who||((t.responsavel||"").split(",").map(v=>v.trim()).filter(Boolean).map(ini)),
       due:alphaDate(t.data),chk:old?.chk||[],comments:old?.comments||[],
       elapsedMs:old?.elapsedMs||0,runningSince:old?.runningSince||null,
@@ -1237,7 +1241,7 @@ async function alphaFlush() {
             const payload=alphaCanonical(card);
             if(payload.status!=="Backlog")await alphaCall("atualizarStatus",card.id,payload.status,board._remoteId);
             // O título é gravado ao criar; demais dados são atualizados em salvarTarefa.
-            if(payload.descricao||card.due||card._responsavel||card._solicitante)
+            if(payload.descricao||card.due||card._responsavel||card._solicitante||payload.prioridade!=="Média")
               await alphaCall("salvarTarefa",{id:card.id,quadroId:board._remoteId,...payload});
             card._lastSheetStatus=payload.status;
             alphaShadow.set(board._remoteId+"::"+card.id,payload);
@@ -1825,14 +1829,10 @@ const BOARD_COVERS = [
   { name: "Verde → Azul Escuro", hex: "#00FFD4", css: "linear-gradient(180deg, #00FFD4 0%, #002233 100%)" }
 ];
 
-const KB_LABELS = [
-  { id: "chat", name: "Google Chat", bg: "#00DBFF", fg: "#002233" },
-  { id: "urg", name: "Urgente", bg: "#FF009E", fg: "#FFFFFF" },
-  { id: "aut", name: "Automação", bg: "#00FFD4", fg: "#002233" },
-  { id: "mel", name: "Melhoria", bg: "#A44DFF", fg: "#FFFFFF" },
-  { id: "pro", name: "Processo", bg: "#FF8900", fg: "#002233" },
-  { id: "ok", name: "Validado", bg: "#D9FF65", fg: "#002233" }
-];
+const ALPHA_PRIORIDADES = ["Baixa","Média","Alta","Urgente"];
+const ALPHA_PRIORITY_COLOR = {
+  "Baixa":"#0d9b83","Média":"#206fbd","Alta":"#d36a13","Urgente":"#c92b66"
+};
 
 const KB_AVC = [
   { bg: "#002233", fg: "#FFFFFF" },
@@ -2201,7 +2201,6 @@ function submitNewList() {
 }
 
 function renderKbCard(c, col) {
-  const lbls = (c.labels || []).map(id => KB_LABELS.find(l => l.id === id)).filter(Boolean);
   const doneChk = (c.chk || []).filter(x => x.d).length;
   const totalChk = (c.chk || []).length;
   const elapsed = getCardElapsedMs(c);
@@ -2220,14 +2219,15 @@ function renderKbCard(c, col) {
     timerHtml = `<div class="kb-timer paused" data-timer-card="${c.id}"><span>⏸ Pausado: <b class="kb-timer-val">${formatDuration(elapsed)}</b></span>${isBacklogCol ? `<button type="button" class="kb-timer-reset" data-reset-timer="${c.id}" title="Zerar cronômetro">Zerar</button>` : ""}</div>`;
   }
 
-  const hasFooter = (c.desc && c.desc.trim()) || totalChk > 0 || c.due || (c.comments && c.comments.length) || (c.who && c.who.length);
+  const hasFooter = (c.desc && c.desc.trim()) || totalChk > 0 || c.due || (c.comments && c.comments.length) || (c.who && c.who.length) || (c._solicitante && c._solicitante.trim());
   return `
     <div class="kb-card" draggable="true" data-card-id="${c.id}">
-      ${lbls.length ? `<div class="kb-labels">${lbls.map(l => `<span class="kb-lbl" style="background:${l.bg};color:${l.fg}">${esc(l.name)}</span>`).join("")}</div>` : ""}
       <div class="kb-card-title">${esc(c.title)}</div>
+      <span class="alpha-priority-pill" style="--priority-color:${ALPHA_PRIORITY_COLOR[c._prioridade] || ALPHA_PRIORITY_COLOR["Média"]}">${esc(c._prioridade || "Média")}</span>
       ${timerHtml}
       ${hasFooter ? `
         <div class="kb-card-foot">
+          ${c._solicitante && c._solicitante.trim() ? `<span class="kb-badge alpha-requester" title="Solicitante: ${esc(c._solicitante)}">Solicitante: ${esc(c._solicitante)}</span>` : ""}
           ${c.desc && c.desc.trim() ? `<span class="kb-badge kb-ic" title="Possui descrição">${ic("align")}</span>` : ""}
           ${c.due ? `<span class="kb-badge kb-ic" title="Prazo">${ic("cal")} ${esc(c.due.split("-").reverse().slice(0,2).join("/"))}</span>` : ""}
           ${totalChk > 0 ? `<span class="kb-badge kb-ic ${doneChk === totalChk ? "done" : ""}" title="Checklist">${ic("checkSq")} ${doneChk}/${totalChk}</span>` : ""}
@@ -2354,7 +2354,7 @@ function openCardModal(cardId, defaultCol) {
   const firstCol = board.lists[0].key;
   const draft = existing
     ? JSON.parse(JSON.stringify(existing))
-    : { id: "c-" + Date.now(), col: defaultCol || firstCol, title: "", desc: "", labels: [], who: [currentUser.initials || "AP"], due: "", chk: [], comments: [], elapsedMs: 0, runningSince: null };
+    : { id: "c-" + Date.now(), col: defaultCol || firstCol, title: "", desc: "", who: [currentUser.initials || "AP"], _solicitante: "", _prioridade: "Média", due: "", chk: [], comments: [], elapsedMs: 0, runningSince: null };
 
   const renderModal = () => {
     const elapsed = getCardElapsedMs(draft);
@@ -2382,10 +2382,16 @@ function openCardModal(cardId, defaultCol) {
           <input type="date" class="m-input" id="cmDue" value="${esc(draft.due || "")}">
         </div>
       </div>
-      <div class="m-field">
-        <label>Etiquetas</label>
-        <div class="m-lbl-grid" id="cmLabels">
-          ${KB_LABELS.map(l => `<button type="button" class="m-lbl-opt ${draft.labels.includes(l.id) ? "on" : ""}" data-lbl="${l.id}" style="background:${l.bg};color:${l.fg}">${esc(l.name)}</button>`).join("")}
+      <div class="guide-grid2" style="margin-top:0;gap:12px">
+        <div class="m-field">
+          <label>Solicitante</label>
+          <input type="text" class="m-input" id="cmSolicitante" value="${esc(draft._solicitante || "")}" placeholder="Quem solicitou a tarefa?">
+        </div>
+        <div class="m-field">
+          <label>Prioridade</label>
+          <select class="m-select" id="cmPrioridade">
+            ${ALPHA_PRIORIDADES.map(p => `<option value="${esc(p)}" ${p === (draft._prioridade || "Média") ? "selected" : ""}>${esc(p)}</option>`).join("")}
+          </select>
         </div>
       </div>
       <div class="m-field">
@@ -2430,6 +2436,8 @@ function openCardModal(cardId, defaultCol) {
       draft.col = $("#cmCol").value;
       draft.due = $("#cmDue").value;
       draft.desc = $("#cmDesc").value;
+      draft._solicitante = $("#cmSolicitante").value.trim();
+      draft._prioridade = $("#cmPrioridade").value;
       draft.who = $("#cmWho").value.split(/[,\s]+/).map(x => x.trim().toUpperCase().slice(0, 2)).filter(Boolean);
     };
 
@@ -2446,15 +2454,6 @@ function openCardModal(cardId, defaultCol) {
       };
     }
 
-    $("#cmLabels").onclick = e => {
-      const b = e.target.closest("[data-lbl]");
-      if (!b) return;
-      syncInputs();
-      const id = b.dataset.lbl;
-      if (draft.labels.includes(id)) draft.labels = draft.labels.filter(x => x !== id);
-      else draft.labels.push(id);
-      renderModal();
-    };
     $("#cmChkList").onchange = e => {
       if (e.target.dataset.chkIdx === undefined) return;
       syncInputs();
