@@ -1169,7 +1169,7 @@ function alphaApplyPayload(estrutura,tarefas) {
     const card={
       id:t.id,_sheetId:t.id,col:old && old._lastSheetStatus===t.status?old.col:mapped,
       title:t.titulo,desc:t.descricao,
-      who:old?.who||((t.responsavel||"").split(",").map(v=>v.trim()).filter(Boolean).map(ini)),
+      who:(t.responsavel||"").split(",").map(v=>v.trim()).filter(Boolean).map(ini),
       due:alphaDate(t.data),chk:old?.chk||[],comments:old?.comments||[],
       elapsedMs:old?.elapsedMs||0,runningSince:old?.runningSince||null,
       _responsavel:t.responsavel||"",_solicitante:t.solicitante||"",
@@ -2513,7 +2513,7 @@ function openCardModal(cardId, defaultCol) {
         if(previousColumn!==live.col)handleCardColumnTransition(board,live,previousColumn,live.col);
         persistBoardToServer("");
         const indicator=$("#cmAutoSaveStatus");
-        if(indicator)indicator.textContent="Alterações encaminhadas ao Google Sheets.";
+        if(indicator)indicator.textContent="Salvando alterações no Google Sheets…";
       },500);
     };
     ["cmTitle","cmCol","cmDue","cmSolicitante","cmPrioridade","cmResponsavel","cmDesc"].forEach(id=>{
