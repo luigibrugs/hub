@@ -1324,7 +1324,7 @@ function alphaApplyPayload(estrutura,tarefas,detalhes=[]) {
     }
     const remoteDetail=detailsMap.get(t.quadroId+"::"+t.id);
     const card={
-      id:t.id,_sheetId:t.id,_boardId:board.id,col:old && old._lastSheetStatus===t.status?old.col:mapped,
+      id:t.id,_sheetId:t.id,_boardId:board.id,col:old && old._lastSheetStatus===t.status && board.lists.some(l=>l.key===old.col)?old.col:mapped,
       title:t.titulo,desc:t.descricao,
       who:(t.responsavel||"").split(",").map(v=>v.trim()).filter(Boolean).map(ini),
       due:alphaDate(t.data),
