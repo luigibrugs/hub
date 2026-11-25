@@ -703,6 +703,55 @@ body[data-card-size="1"] .kb-card-foot,body[data-card-size="1"] .alpha-priority-
 body[data-card-size="2"] .kb-card-foot,body[data-card-size="2"] .alpha-priority-pill{font-size:11.5px}
 body[data-card-size="3"] .kb-card-foot,body[data-card-size="3"] .alpha-priority-pill{font-size:12px}
 .alpha-autosave-info{font-size:11px;color:var(--mute);margin:8px 0 0}
+
+/* Escalas de acessibilidade: layout original preservado */
+body{--alpha-a11y-font:1;--alpha-ui-mult:1;--alpha-board-mult:1}
+body[data-text-level="1"]{--alpha-a11y-font:1.10}
+body[data-text-level="2"]{--alpha-a11y-font:1.22}
+body[data-text-level="3"]{--alpha-a11y-font:1.38}
+body[data-text-level="4"]{--alpha-a11y-font:1.55}
+body[data-ui-level="1"]{--alpha-ui-mult:1.10}
+body[data-ui-level="2"]{--alpha-ui-mult:1.20}
+body[data-ui-level="3"]{--alpha-ui-mult:1.32}
+body[data-ui-level="4"]{--alpha-ui-mult:1.48}
+body[data-boards-level="1"]{--alpha-board-mult:1.08}
+body[data-boards-level="2"]{--alpha-board-mult:1.18}
+body[data-boards-level="3"]{--alpha-board-mult:1.30}
+body[data-boards-level="4"]{--alpha-board-mult:1.45}
+body .view p,body .lead,body .nav-item,body nav button,body .bar,body .doc-row,body .ct-row,body .guide-item,body .m-field label,body .m-input,body .m-select,body .m-textarea,body .btn,body .pt-env-btn,body .pt-env-del,body .kb-tools button,body .kb-col-name,body .kb-card-title,body .kb-badge,body .kb-timer,body .tr-name,body .tr-pill,body .toast{
+ font-size:calc(13px * var(--alpha-a11y-font)) !important;line-height:1.48;
+}
+body .view h1{font-size:calc(34px * var(--alpha-a11y-font)) !important}
+body .view h2,body .box h3{font-size:calc(23px * var(--alpha-a11y-font)) !important}
+body .pt-env-title{font-size:calc(20px * var(--alpha-a11y-font)) !important}
+body .kb-card-title,body .tr-name{font-size:calc(14px * var(--alpha-a11y-font)) !important}
+body .kb-card-title{font-weight:750}
+body .pt-add-tile,body .pt-env-btn,body .m-btn-pri,body .m-btn-dg,body .btn,body .kb-new-btn,body .bar-act{
+ min-height:calc(40px * var(--alpha-ui-mult));padding:calc(9px * var(--alpha-ui-mult)) calc(12px * var(--alpha-ui-mult));
+}
+body .m-input,body .m-select,body .m-textarea,body .sr-wrap input{
+ min-height:calc(40px * var(--alpha-ui-mult));padding:calc(9px * var(--alpha-ui-mult));
+}
+body .pt-boards{gap:calc(18px * var(--alpha-board-mult));}
+body .tr-card,body .pt-add-tile{width:calc(176px * var(--alpha-board-mult));min-width:calc(176px * var(--alpha-board-mult));min-height:calc(150px * var(--alpha-board-mult));}
+body .tr-cover{min-height:calc(100px * var(--alpha-board-mult));}
+body .pt-env{padding:calc(8px * var(--alpha-board-mult)) 0}
+body .pt-env-del,body .tr-del{opacity:1;min-width:32px;min-height:32px}
+.alpha-hub-actions{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0 22px}
+.alpha-help{font-size:calc(12px * var(--alpha-a11y-font));color:var(--mute);padding:10px;border:1px solid var(--line);border-radius:10px}
+.alpha-easy .pt-add-tile:after{content:"Toque para adicionar um quadro";display:block;font-size:12px;margin-top:5px}
+.alpha-easy .kb-new-btn:after{content:" nova tarefa"}
+.alpha-easy .pt-env:before{content:"ESPAÇO — contém os quadros abaixo";display:block;font-size:13px;font-weight:700;margin-bottom:10px}
+.alpha-easy button,.alpha-easy select,.alpha-easy input{outline-offset:3px}
+body[data-contrast="high"]{--bg:#FFFFFF;--ink:#081c26;--mute:#32434b;--line:rgba(0,0,0,.38);--card-strong:#FFFFFF;--surface-soft:#eef2f5;--side:#001725}
+body.dark[data-contrast="high"]{--bg:#071923;--ink:#FFFFFF;--mute:#DBE7EE;--line:rgba(255,255,255,.50);--card-strong:#082b3c;--surface-soft:#123c4c}
+body[data-contrast="maximum"]{--bg:#FFFFFF;--ink:#000000;--mute:#000000;--line:#000000;--card-strong:#FFFFFF;--card:#FFFFFF;--surface-soft:#FFFFFF;--side:#000000;--cy:#006E99;--cyd:#006E99}
+body.dark[data-contrast="maximum"]{--bg:#000000;--ink:#FFFFFF;--mute:#FFFFFF;--line:#FFFFFF;--card-strong:#000000;--card:#000000;--surface-soft:#000000;--side:#000000;--cy:#00DBFF;--cyd:#00DBFF}
+body[data-contrast="maximum"] .kb-card,body[data-contrast="maximum"] .tr-card,body[data-contrast="maximum"] .glass,body[data-contrast="maximum"] .m-input,body[data-contrast="maximum"] .m-select{border:2px solid var(--ink)!important;box-shadow:none!important}
+body[data-contrast="maximum"] button:focus-visible,body[data-contrast="high"] button:focus-visible{outline:3px solid var(--cy);outline-offset:3px}
+body.alpha-reduce-motion *,body.alpha-reduce-motion *:before,body.alpha-reduce-motion *:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+@media(max-width:720px){body .pt-boards{gap:10px}body .tr-card,body .pt-add-tile{max-width:calc(50vw - 22px);min-width:140px}}
 </style>
 </head>
 <body class="auth-lock">
@@ -944,31 +993,83 @@ const store = {
 };
 
 
-const ALPHA_CARD_SIZE_KEY="alpha-card-size-v1";
-function alphaCardSize(level) {
-  const n=Math.max(0,Math.min(3,Number(level)||0));
-  document.body.dataset.cardSize=String(n);
-  store.set(ALPHA_CARD_SIZE_KEY,n);
+
+const ALPHA_A11Y_KEY="alpha-accessibility-v2";
+const ALPHA_A11Y_DEFAULT={cards:1,text:1,ui:1,boards:1,contrast:"normal",easy:false,sounds:false,motion:true};
+let alphaA11y={...ALPHA_A11Y_DEFAULT,...store.get(ALPHA_A11Y_KEY,{})};
+const alphaScale=(v,min=0,max=4)=>Math.max(min,Math.min(max,Number(v)||0));
+function alphaCardSize(level){alphaA11y.cards=alphaScale(level,0,3);alphaApplyAccessibility();}
+function alphaApplyAccessibility() {
+  alphaA11y={...ALPHA_A11Y_DEFAULT,...alphaA11y};
+  if(alphaA11y.easy){alphaA11y.text=Math.max(3,alphaA11y.text);alphaA11y.ui=Math.max(2,alphaA11y.ui);alphaA11y.boards=Math.max(2,alphaA11y.boards);}
+  document.body.dataset.cardSize=String(alphaScale(alphaA11y.cards,0,3));
+  document.body.dataset.textLevel=String(alphaScale(alphaA11y.text));
+  document.body.dataset.uiLevel=String(alphaScale(alphaA11y.ui));
+  document.body.dataset.boardsLevel=String(alphaScale(alphaA11y.boards));
+  document.body.dataset.contrast=String(alphaA11y.contrast);
+  document.body.classList.toggle("alpha-easy",!!alphaA11y.easy);
+  document.body.classList.toggle("alpha-reduce-motion",!alphaA11y.motion);
+  store.set(ALPHA_A11Y_KEY,alphaA11y);
 }
-alphaCardSize(store.get(ALPHA_CARD_SIZE_KEY,1));
-function openAppearanceSettings() {
-  const current=Number(document.body.dataset.cardSize||1);
+alphaApplyAccessibility();
+function alphaSound(kind="create"){
+  if(!alphaA11y.sounds)return;
+  try{
+    const Ctx=window.AudioContext||window.webkitAudioContext;
+    if(!Ctx)return;
+    const ctx=new Ctx();
+    const now=ctx.currentTime;
+    const notes=kind==="complete"?[660,880]:[523,659];
+    notes.forEach((freq,i)=>{
+      const osc=ctx.createOscillator(),gain=ctx.createGain();
+      osc.type="sine";osc.frequency.value=freq;
+      const t=now+i*0.10;
+      gain.gain.setValueAtTime(0.0001,t);
+      gain.gain.exponentialRampToValueAtTime(0.045,t+0.018);
+      gain.gain.exponentialRampToValueAtTime(0.0001,t+0.14);
+      osc.connect(gain);gain.connect(ctx.destination);
+      osc.start(t);osc.stop(t+0.15);
+    });
+    setTimeout(()=>ctx.close().catch(()=>{}),650);
+  }catch(e){console.warn("Som indisponível",e);}
+}
+function openAppearanceSettings(){
+  const values=(key,items)=>items.map((label,i)=>`<option value="${i}" ${alphaA11y[key]===i?"selected":""}>${label}</option>`).join("");
+  const options=["Normal","Levemente maior","Grande","Muito grande","Extra grande"];
   $("#box").innerHTML=`
-    <h3>Configurações do painel</h3>
-    <p>Personalize o tamanho dos cards e fontes neste navegador.</p>
-    <div class="m-field">
-      <label for="alphaSizeSelect">Tamanho dos cards</label>
-      <select id="alphaSizeSelect" class="m-select">
-        ${["Compacto","Padrão (+ leve)","Confortável","Ampliado"].map((label,i)=>`<option value="${i}" ${i===current?"selected":""}>${label}</option>`).join("")}
-      </select>
+    <h3>Configurações de acessibilidade</h3>
+    <p>Personalize a leitura e o tamanho de toda a interface. As alterações são aplicadas na hora.</p>
+    <div class="m-field"><label for="alphaEasy">Modo Fácil</label>
+      <select class="m-select" id="alphaEasy"><option value="false" ${!alphaA11y.easy?"selected":""}>Desativado</option><option value="true" ${alphaA11y.easy?"selected":""}>Ativado — letras grandes e orientações claras</option></select>
     </div>
-    <p style="font-size:12px;color:var(--mute)">Esta preferência não altera a planilha.</p>
-    <div class="m-acts"><button type="button" class="m-btn-pri" id="alphaSettingsClose">Concluir</button></div>`;
+    <div class="guide-grid2" style="gap:12px">
+      <div class="m-field"><label for="alphaText">Tamanho das letras de todo o site</label><select class="m-select" id="alphaText">${values("text",options)}</select></div>
+      <div class="m-field"><label for="alphaUi">Tamanho geral dos botões e controles</label><select class="m-select" id="alphaUi">${values("ui",options)}</select></div>
+      <div class="m-field"><label for="alphaBoards">Tamanho dos espaços e quadros</label><select class="m-select" id="alphaBoards">${values("boards",options)}</select></div>
+      <div class="m-field"><label for="alphaSizeSelect">Tamanho dos cards do Kanban</label><select class="m-select" id="alphaSizeSelect">${["Compacto","Padrão","Confortável","Ampliado"].map((v,i)=>`<option value="${i}" ${alphaA11y.cards===i?"selected":""}>${v}</option>`).join("")}</select></div>
+      <div class="m-field"><label for="alphaContrast">Contraste</label><select class="m-select" id="alphaContrast">
+        <option value="normal" ${alphaA11y.contrast==="normal"?"selected":""}>Normal</option>
+        <option value="high" ${alphaA11y.contrast==="high"?"selected":""}>Alto contraste</option>
+        <option value="maximum" ${alphaA11y.contrast==="maximum"?"selected":""}>Contraste máximo</option>
+      </select></div>
+      <div class="m-field"><label for="alphaSounds">Sons suaves de confirmação</label><select class="m-select" id="alphaSounds"><option value="false" ${!alphaA11y.sounds?"selected":""}>Desativados</option><option value="true" ${alphaA11y.sounds?"selected":""}>Ativados</option></select></div>
+      <div class="m-field"><label for="alphaMotion">Animações leves</label><select class="m-select" id="alphaMotion"><option value="true" ${alphaA11y.motion?"selected":""}>Ativadas</option><option value="false" ${!alphaA11y.motion?"selected":""}>Reduzir movimento</option></select></div>
+    </div>
+    <p class="alpha-help">Dica: ative Modo Fácil para destacar botões, aumentar os textos e mostrar instruções de uso.</p>
+    <div class="m-acts"><button class="btn" id="alphaReset">Restaurar padrão</button><button class="m-btn-pri" id="alphaSettingsClose">Concluir</button></div>`;
   $("#mod").classList.add("open");
-  $("#alphaSizeSelect").onchange=e=>{alphaCardSize(e.target.value);if(currentRoute==="painel-board")renderActiveBoard();};
+  const fields={alphaText:"text",alphaUi:"ui",alphaBoards:"boards",alphaSizeSelect:"cards",alphaContrast:"contrast",alphaSounds:"sounds",alphaMotion:"motion",alphaEasy:"easy"};
+  Object.entries(fields).forEach(([id,k])=>$("#"+id).onchange=e=>{
+    const value=e.target.value;
+    alphaA11y[k]=["sounds","motion","easy"].includes(k)?value==="true":k==="contrast"?value:Number(value);
+    alphaApplyAccessibility();
+    if(currentRoute==="painel-totvs")renderPainelHub();
+    if(currentRoute==="painel-board")renderActiveBoard();
+    if(k==="easy")openAppearanceSettings();
+  });
+  $("#alphaReset").onclick=()=>{alphaA11y={...ALPHA_A11Y_DEFAULT};alphaApplyAccessibility();openAppearanceSettings();};
   $("#alphaSettingsClose").onclick=closeMod;
 }
-
 function copyText(txt, label) {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(txt).then(() => toast(label || "Copiado!")).catch(() => toast(txt));
