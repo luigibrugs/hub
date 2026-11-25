@@ -686,6 +686,23 @@ body.dark .theme-toggle-icon-container { transform: translateX(24px); color: #00
   .bar { left: 94px !important; right: 16px; flex-wrap: wrap; gap: 10px 16px; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* Prioridade é um campo real do Google Sheets, não uma etiqueta visual. */
+.alpha-priority-pill{display:inline-flex;width:max-content;align-items:center;margin:7px 0 3px;padding:4px 9px;border-radius:7px;font-size:10.5px;font-weight:700;letter-spacing:.01em;color:var(--priority-color);background:color-mix(in srgb,var(--priority-color) 11%,transparent);border:1px solid color-mix(in srgb,var(--priority-color) 25%,transparent)}
+.alpha-requester{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10.5px}
+
+body[data-card-size="0"] .kb-card{padding:12px 14px}
+body[data-card-size="1"] .kb-card{padding:13px 15px;min-height:80px}
+body[data-card-size="2"] .kb-card{padding:15px 16px;min-height:92px}
+body[data-card-size="3"] .kb-card{padding:17px 18px;min-height:104px}
+body[data-card-size="0"] .kb-card-title{font-size:13px}
+body[data-card-size="1"] .kb-card-title{font-size:13.5px}
+body[data-card-size="2"] .kb-card-title{font-size:14px}
+body[data-card-size="3"] .kb-card-title{font-size:15px}
+body[data-card-size="1"] .kb-card-foot,body[data-card-size="1"] .alpha-priority-pill{font-size:11px}
+body[data-card-size="2"] .kb-card-foot,body[data-card-size="2"] .alpha-priority-pill{font-size:11.5px}
+body[data-card-size="3"] .kb-card-foot,body[data-card-size="3"] .alpha-priority-pill{font-size:12px}
+.alpha-autosave-info{font-size:11px;color:var(--mute);margin:8px 0 0}
 </style>
 </head>
 <body class="auth-lock">
@@ -888,7 +905,7 @@ body.dark .theme-toggle-icon-container { transform: translateX(24px); color: #00
       <div class="theme-toggle-handle"></div>
     </div>
     <span class="bar-sep"></span>
-    <button type="button" class="bar-act" onclick="toast('Configurações em breve')">
+    <button type="button" class="bar-act" onclick="openAppearanceSettings()">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9L7 7M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Configurações
     </button>
     <a href="#" data-link="ajuda">
@@ -925,6 +942,32 @@ const store = {
   get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
   set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
 };
+
+
+const ALPHA_CARD_SIZE_KEY="alpha-card-size-v1";
+function alphaCardSize(level) {
+  const n=Math.max(0,Math.min(3,Number(level)||0));
+  document.body.dataset.cardSize=String(n);
+  store.set(ALPHA_CARD_SIZE_KEY,n);
+}
+alphaCardSize(store.get(ALPHA_CARD_SIZE_KEY,1));
+function openAppearanceSettings() {
+  const current=Number(document.body.dataset.cardSize||1);
+  $("#box").innerHTML=`
+    <h3>Configurações do painel</h3>
+    <p>Personalize o tamanho dos cards e fontes neste navegador.</p>
+    <div class="m-field">
+      <label for="alphaSizeSelect">Tamanho dos cards</label>
+      <select id="alphaSizeSelect" class="m-select">
+        ${["Compacto","Padrão (+ leve)","Confortável","Ampliado"].map((label,i)=>`<option value="${i}" ${i===current?"selected":""}>${label}</option>`).join("")}
+      </select>
+    </div>
+    <p style="font-size:12px;color:var(--mute)">Esta preferência não altera a planilha.</p>
+    <div class="m-acts"><button type="button" class="m-btn-pri" id="alphaSettingsClose">Concluir</button></div>`;
+  $("#mod").classList.add("open");
+  $("#alphaSizeSelect").onchange=e=>{alphaCardSize(e.target.value);if(currentRoute==="painel-board")renderActiveBoard();};
+  $("#alphaSettingsClose").onclick=closeMod;
+}
 
 function copyText(txt, label) {
   if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -1125,8 +1168,8 @@ function alphaApplyPayload(estrutura,tarefas) {
     const mapped=ALPHA_STATUS_FROM_SHEET[t.status]||"backlog";
     const card={
       id:t.id,_sheetId:t.id,col:old && old._lastSheetStatus===t.status?old.col:mapped,
-      title:t.titulo,desc:t.descricao,labels:old?.labels||[],
-      who:old?.who||((t.responsavel||"").split(",").map(v=>v.trim()).filter(Boolean).map(ini)),
+      title:t.titulo,desc:t.descricao,
+      who:(t.responsavel||"").split(",").map(v=>v.trim()).filter(Boolean).map(ini),
       due:alphaDate(t.data),chk:old?.chk||[],comments:old?.comments||[],
       elapsedMs:old?.elapsedMs||0,runningSince:old?.runningSince||null,
       _responsavel:t.responsavel||"",_solicitante:t.solicitante||"",
@@ -1237,7 +1280,7 @@ async function alphaFlush() {
             const payload=alphaCanonical(card);
             if(payload.status!=="Backlog")await alphaCall("atualizarStatus",card.id,payload.status,board._remoteId);
             // O título é gravado ao criar; demais dados são atualizados em salvarTarefa.
-            if(payload.descricao||card.due||card._responsavel||card._solicitante)
+            if(payload.descricao||card.due||card._responsavel||card._solicitante||payload.prioridade!=="Média")
               await alphaCall("salvarTarefa",{id:card.id,quadroId:board._remoteId,...payload});
             card._lastSheetStatus=payload.status;
             alphaShadow.set(board._remoteId+"::"+card.id,payload);
@@ -1825,14 +1868,19 @@ const BOARD_COVERS = [
   { name: "Verde → Azul Escuro", hex: "#00FFD4", css: "linear-gradient(180deg, #00FFD4 0%, #002233 100%)" }
 ];
 
-const KB_LABELS = [
-  { id: "chat", name: "Google Chat", bg: "#00DBFF", fg: "#002233" },
-  { id: "urg", name: "Urgente", bg: "#FF009E", fg: "#FFFFFF" },
-  { id: "aut", name: "Automação", bg: "#00FFD4", fg: "#002233" },
-  { id: "mel", name: "Melhoria", bg: "#A44DFF", fg: "#FFFFFF" },
-  { id: "pro", name: "Processo", bg: "#FF8900", fg: "#002233" },
-  { id: "ok", name: "Validado", bg: "#D9FF65", fg: "#002233" }
-];
+const ALPHA_PRIORIDADES = ["Baixa","Média","Alta","Urgente"];
+const ALPHA_PESSOAS = ["Luiz Carlos","Luigi Trintoni","Gabriela Feitosa","Guilherme Crisostomo","Ana Clara","Luiza Santos","Letícia de Souza","Leonardo dos Santos","Andrea Conti","Tessie Simonato","Edineis Colombo"];
+
+function alphaPessoaOptions(current) {
+  const selected=String(current||"").trim();
+  const options=['',...ALPHA_PESSOAS];
+  if(selected&&!options.includes(selected))options.push(selected);
+  return options.map(name=>`<option value="${esc(name)}" ${selected===name?"selected":""}>${name?esc(name):"Selecione uma pessoa"}</option>`).join("");
+}
+
+const ALPHA_PRIORITY_COLOR = {
+  "Baixa":"#0d9b83","Média":"#206fbd","Alta":"#d36a13","Urgente":"#c92b66"
+};
 
 const KB_AVC = [
   { bg: "#002233", fg: "#FFFFFF" },
@@ -2201,7 +2249,6 @@ function submitNewList() {
 }
 
 function renderKbCard(c, col) {
-  const lbls = (c.labels || []).map(id => KB_LABELS.find(l => l.id === id)).filter(Boolean);
   const doneChk = (c.chk || []).filter(x => x.d).length;
   const totalChk = (c.chk || []).length;
   const elapsed = getCardElapsedMs(c);
@@ -2220,14 +2267,15 @@ function renderKbCard(c, col) {
     timerHtml = `<div class="kb-timer paused" data-timer-card="${c.id}"><span>⏸ Pausado: <b class="kb-timer-val">${formatDuration(elapsed)}</b></span>${isBacklogCol ? `<button type="button" class="kb-timer-reset" data-reset-timer="${c.id}" title="Zerar cronômetro">Zerar</button>` : ""}</div>`;
   }
 
-  const hasFooter = (c.desc && c.desc.trim()) || totalChk > 0 || c.due || (c.comments && c.comments.length) || (c.who && c.who.length);
+  const hasFooter = (c.desc && c.desc.trim()) || totalChk > 0 || c.due || (c.comments && c.comments.length) || (c.who && c.who.length) || (c._solicitante && c._solicitante.trim());
   return `
     <div class="kb-card" draggable="true" data-card-id="${c.id}">
-      ${lbls.length ? `<div class="kb-labels">${lbls.map(l => `<span class="kb-lbl" style="background:${l.bg};color:${l.fg}">${esc(l.name)}</span>`).join("")}</div>` : ""}
       <div class="kb-card-title">${esc(c.title)}</div>
+      <span class="alpha-priority-pill" style="--priority-color:${ALPHA_PRIORITY_COLOR[c._prioridade] || ALPHA_PRIORITY_COLOR["Média"]}">${esc(c._prioridade || "Média")}</span>
       ${timerHtml}
       ${hasFooter ? `
         <div class="kb-card-foot">
+          ${c._solicitante && c._solicitante.trim() ? `<span class="kb-badge alpha-requester" title="Solicitante: ${esc(c._solicitante)}">Solicitante: ${esc(c._solicitante)}</span>` : ""}
           ${c.desc && c.desc.trim() ? `<span class="kb-badge kb-ic" title="Possui descrição">${ic("align")}</span>` : ""}
           ${c.due ? `<span class="kb-badge kb-ic" title="Prazo">${ic("cal")} ${esc(c.due.split("-").reverse().slice(0,2).join("/"))}</span>` : ""}
           ${totalChk > 0 ? `<span class="kb-badge kb-ic ${doneChk === totalChk ? "done" : ""}" title="Checklist">${ic("checkSq")} ${doneChk}/${totalChk}</span>` : ""}
@@ -2250,7 +2298,8 @@ function submitQuickCard(colKey) {
     title: txt,
     desc: "",
     labels: [],
-    who: [currentUser.initials || "AP"],
+    who: [],
+    _responsavel: "", _solicitante: "", _prioridade: "Média",
     due: "",
     chk: [],
     comments: [],
@@ -2354,7 +2403,7 @@ function openCardModal(cardId, defaultCol) {
   const firstCol = board.lists[0].key;
   const draft = existing
     ? JSON.parse(JSON.stringify(existing))
-    : { id: "c-" + Date.now(), col: defaultCol || firstCol, title: "", desc: "", labels: [], who: [currentUser.initials || "AP"], due: "", chk: [], comments: [], elapsedMs: 0, runningSince: null };
+    : { id: "c-" + Date.now(), col: defaultCol || firstCol, title: "", desc: "", who: [], _responsavel: "", _solicitante: "", _prioridade: "Média", due: "", chk: [], comments: [], elapsedMs: 0, runningSince: null };
 
   const renderModal = () => {
     const elapsed = getCardElapsedMs(draft);
@@ -2382,15 +2431,21 @@ function openCardModal(cardId, defaultCol) {
           <input type="date" class="m-input" id="cmDue" value="${esc(draft.due || "")}">
         </div>
       </div>
-      <div class="m-field">
-        <label>Etiquetas</label>
-        <div class="m-lbl-grid" id="cmLabels">
-          ${KB_LABELS.map(l => `<button type="button" class="m-lbl-opt ${draft.labels.includes(l.id) ? "on" : ""}" data-lbl="${l.id}" style="background:${l.bg};color:${l.fg}">${esc(l.name)}</button>`).join("")}
+      <div class="guide-grid2" style="margin-top:0;gap:12px">
+        <div class="m-field">
+          <label>Solicitante</label>
+          <select class="m-select" id="cmSolicitante">${alphaPessoaOptions(draft._solicitante)}</select>
+        </div>
+        <div class="m-field">
+          <label>Prioridade</label>
+          <select class="m-select" id="cmPrioridade">
+            ${ALPHA_PRIORIDADES.map(p => `<option value="${esc(p)}" ${p === (draft._prioridade || "Média") ? "selected" : ""}>${esc(p)}</option>`).join("")}
+          </select>
         </div>
       </div>
       <div class="m-field">
-        <label>Responsáveis (iniciais separadas por vírgula)</label>
-        <input type="text" class="m-input" id="cmWho" value="${esc((draft.who || []).join(", "))}" placeholder="Ex.: GC, MR, RS">
+        <label>Responsável</label>
+        <select class="m-select" id="cmResponsavel">${alphaPessoaOptions(draft._responsavel)}</select>
       </div>
       <div class="m-field">
         <label>Descrição</label>
@@ -2419,6 +2474,7 @@ function openCardModal(cardId, defaultCol) {
           <button type="button" class="btn" id="cmAddCmtBtn" style="flex:none">Comentar</button>
         </div>
       </div>
+      ${existing && existing._sheetId ? `<p class="alpha-autosave-info" id="cmAutoSaveStatus">Alterações de campos da planilha são salvas automaticamente.</p>` : ""}
       <div class="m-acts">
         ${existing ? `<button type="button" class="m-btn-dg" id="cmDeleteBtn">Excluir card</button>` : ""}
         <button type="button" class="btn" id="cl">Cancelar</button>
@@ -2430,8 +2486,40 @@ function openCardModal(cardId, defaultCol) {
       draft.col = $("#cmCol").value;
       draft.due = $("#cmDue").value;
       draft.desc = $("#cmDesc").value;
-      draft.who = $("#cmWho").value.split(/[,\s]+/).map(x => x.trim().toUpperCase().slice(0, 2)).filter(Boolean);
+      draft._solicitante = $("#cmSolicitante").value.trim();
+      draft._prioridade = $("#cmPrioridade").value;
+      draft._responsavel = $("#cmResponsavel").value;
+      draft.who = draft._responsavel ? [ini(draft._responsavel)] : [];
     };
+
+
+    // Alterações em tarefas existentes são enviadas ao Sheets automaticamente.
+    // Para cards novos ainda é necessário clicar em Salvar card.
+    let alphaDraftTimer;
+    const alphaAutoSave = () => {
+      if (!existing || !existing._sheetId) return;
+      clearTimeout(alphaDraftTimer);
+      alphaDraftTimer=setTimeout(()=>{
+        if (!$("#cmTitle") || !$("#cmTitle").value.trim()) return;
+        syncInputs();
+        const live=board.cards.find(c=>c.id===existing.id);
+        if(!live) return;
+        const previousColumn=live.col;
+        Object.assign(live,{
+          title:draft.title.trim(),col:draft.col,due:draft.due,desc:draft.desc,
+          _responsavel:draft._responsavel,_solicitante:draft._solicitante,
+          _prioridade:draft._prioridade,who:draft.who
+        });
+        if(previousColumn!==live.col)handleCardColumnTransition(board,live,previousColumn,live.col);
+        persistBoardToServer("");
+        const indicator=$("#cmAutoSaveStatus");
+        if(indicator)indicator.textContent="Salvando alterações no Google Sheets…";
+      },500);
+    };
+    ["cmTitle","cmCol","cmDue","cmSolicitante","cmPrioridade","cmResponsavel","cmDesc"].forEach(id=>{
+      const el=$("#"+id);
+      if(el){el.addEventListener("input",alphaAutoSave);el.addEventListener("change",alphaAutoSave);}
+    });
 
     if ($("#cmResetTimerBtn")) {
       $("#cmResetTimerBtn").onclick = () => {
@@ -2446,15 +2534,6 @@ function openCardModal(cardId, defaultCol) {
       };
     }
 
-    $("#cmLabels").onclick = e => {
-      const b = e.target.closest("[data-lbl]");
-      if (!b) return;
-      syncInputs();
-      const id = b.dataset.lbl;
-      if (draft.labels.includes(id)) draft.labels = draft.labels.filter(x => x !== id);
-      else draft.labels.push(id);
-      renderModal();
-    };
     $("#cmChkList").onchange = e => {
       if (e.target.dataset.chkIdx === undefined) return;
       syncInputs();
@@ -2498,6 +2577,7 @@ function openCardModal(cardId, defaultCol) {
     }
     $("#cl").onclick = closeMod;
     $("#cmSaveBtn").onclick = () => {
+      clearTimeout(alphaDraftTimer);
       syncInputs();
       if (!draft.title.trim()) return toast("Informe um título para o card");
       draft.title = draft.title.trim();
