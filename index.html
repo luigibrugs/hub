@@ -716,7 +716,7 @@ body[data-card-size="3"] .kb-card-foot,body[data-card-size="3"] .alpha-priority-
       <img id="loginTotvsLogo" class="login-logo" alt="TOTVS">
       <h1 class="login-title">ALPHA</h1>
     </div>
-    <button type="button" id="loginIdentityBtn" class="login-btn">Acessar HUB ALPHA</button><p style="color:#c6e0ec;font-size:11px;margin-top:16px">Acesso visual ao portal — este botão não realiza autenticação corporativa.</p>
+    <button type="button" id="loginIdentityBtn" class="login-btn">TOTVS Identity</button><p style="color:#c6e0ec;font-size:11px;margin-top:16px">Acesso visual ao portal — este botão não realiza autenticação corporativa.</p>
   </div>
 </section>
 
@@ -1143,16 +1143,16 @@ function alphaApplyPayload(estrutura,tarefas) {
     const existing=painelData.envs.find(x=>x._remoteId===e.id);
     const id=ALPHA_FIXED_ENVS[e.id]||e.id;
     remoteEnvs.set(e.id,id);
-    return {id,_remoteId:e.id,title:e.nome,personal:e.id==="meus-quadros",fixed:!!e.fixo};
+    return {id,_remoteId:e.id,title:e.nome,personal:e.id==="meus-quadros",fixed:false};
   });
   const boards=(estrutura.quadros||[]).map(q=>{
     const id=ALPHA_FIXED_IDS[q.id]||q.id;
     const old=oldBoards.get(q.id)||oldBoards.get(id);
     return {
       id,_remoteId:q.id,envId:remoteEnvs.get(q.espacoId)||"env-gov-aprendizes",
-      title:old?.title||q.nome,color:old?.color||q.cor||"#00DBFF",
+      title:q.nome,color:old?.color||q.cor||"#00DBFF",
       cover:old?.cover||BOARD_COVERS[0].css,
-      fixed:!!ALPHA_FIXED_IDS[q.id],aba:q.aba,abaUrl:q.abaUrl,
+      fixed:false,aba:q.aba,abaUrl:q.abaUrl,
       lists:old?.lists?.length?old.lists:JSON.parse(JSON.stringify(DEFAULT_KB_COLS)),
       cards:[]
     };
@@ -1192,8 +1192,8 @@ function alphaApplyPayload(estrutura,tarefas) {
       if(!dest.cards.some(x=>x.id===c.id))dest.cards.push(c);
     });
   });
-  const extraEnvs=(painelData.envs||[]).filter(e=>!e._remoteId);
-  const extraBoards=previous.filter(b=>!b._remoteId);
+  const extraEnvs=(painelData.envs||[]).filter(e=>!e._remoteId&&!e.fixed);
+  const extraBoards=previous.filter(b=>!b._remoteId&&!b.fixed);
   painelData={envs:[...envs,...extraEnvs.filter(e=>!envs.some(x=>x.id===e.id))],
              boards:[...boards,...extraBoards.filter(b=>!boards.some(x=>x.id===b.id))]};
   alphaShadow=newShadow;
@@ -1906,6 +1906,7 @@ let painelData = store.get("alpha_painel_visual_v4", null);
 const savePainelData = () => store.set("alpha_painel_visual_v4", painelData);
 
 function ensureFixedPainelData() {
+ if(alphaLoadedOnce)return;
   if (!painelData || !Array.isArray(painelData.envs) || !Array.isArray(painelData.boards)) {
     painelData = JSON.parse(JSON.stringify(PAINEL_SEED));
     savePainelData();
@@ -2017,6 +2018,55 @@ document.addEventListener("mouseup", () => {
   setTimeout(() => { boardPanMoved = false; }, 50);
 });
 
+
+function alphaError(e){toast("Falha na planilha: "+(e?.message||String(e)));}
+async function alphaDeleteCard(board,card){
+ if(!board||!card)return;
+ try{
+  if(card._sheetId)await alphaCall("excluirTarefa",{id:card._sheetId,quadroId:board._remoteId});
+  board.cards=board.cards.filter(c=>c.id!==card.id);
+  alphaShadow.delete(board._remoteId+"::"+card.id);
+  savePainelData();closeMod();renderActiveBoard();alphaSound("complete");toast("Card excluído da planilha.");
+ }catch(e){alphaError(e);}
+}
+async function alphaDeleteBoard(board){
+ if(!board)return;
+ try{
+  if(board._remoteId)await alphaCall("excluirQuadro",board._remoteId);
+  painelData.boards=painelData.boards.filter(b=>b.id!==board.id);
+  if(activeBoardId===board.id)activeBoardId=null;
+  savePainelData();navigate("painel-totvs");renderPainelHub();toast("Quadro e aba excluídos.");
+ }catch(e){alphaError(e);}
+}
+async function alphaDeleteEnv(env){
+ if(!env)return;
+ try{
+  if(env._remoteId)await alphaCall("excluirEspaco",env._remoteId);
+  painelData.boards=painelData.boards.filter(b=>b.envId!==env.id);
+  painelData.envs=painelData.envs.filter(e=>e.id!==env.id);
+  savePainelData();renderPainelHub();toast("Espaço e seus quadros excluídos.");
+ }catch(e){alphaError(e);}
+}
+async function alphaRenameBoard(board,newName){
+ if(!board||!newName||newName===board.title)return;
+ try{
+  if(board._remoteId)await alphaCall("renomearQuadro",{id:board._remoteId,nome:newName});
+  board.title=newName;savePainelData();renderActiveBoard();toast("Quadro renomeado.");
+ }catch(e){alphaError(e);renderActiveBoard();}
+}
+function alphaRenameEnv(env){
+ if(!env)return;
+ $("#box").innerHTML=`<h3>Renomear espaço</h3><p>Atualize o nome do espaço.</p><label for="alphaRenamedEnv">Novo nome</label><input class="m-input" id="alphaRenamedEnv" value="${esc(env.title)}"><div class="m-acts"><button class="btn" id="cl">Cancelar</button><button class="m-btn-pri" id="alphaRenameSave">Salvar</button></div>`;
+ $("#mod").classList.add("open");$("#cl").onclick=closeMod;
+ $("#alphaRenameSave").onclick=async()=>{
+  const nome=$("#alphaRenamedEnv").value.trim();if(!nome)return toast("Digite um nome.");
+  try{
+   if(env._remoteId)await alphaCall("renomearEspaco",{id:env._remoteId,nome});
+   env.title=nome;savePainelData();closeMod();renderPainelHub();toast("Espaço renomeado.");
+  }catch(e){alphaError(e);}
+ };
+}
+
 function confirmActionModal(title, subtitle, confirmLabel, onConfirm) {
   $("#box").innerHTML = `
     <h3>${esc(title)}</h3>
@@ -2035,17 +2085,17 @@ function renderPainelHub() {
   updateSyncIndicator();
   const hub = $("#painelTotvsHub");
   if (!hub) return;
-  hub.innerHTML = painelData.envs.map((env, eIdx) => {
+  hub.innerHTML = `<div class="alpha-hub-actions"><button type="button" class="pt-env-btn" id="btnNewEnv">+ Criar espaço</button><button type="button" class="pt-env-btn" id="alphaHubSync">↻ Atualizar dados</button></div>` + painelData.envs.map((env, eIdx) => {
     const boards = painelData.boards.filter(b => b.envId === env.id);
-    const isFixedEnv = Boolean(env.fixed || env.personal || env.id === "env-gov-aprendizes");
+    const isFixedEnv = false;
     return `
       <div class="pt-env st" style="--i:${eIdx}">
         <div class="pt-env-head">
           <div class="pt-env-title-wrap">
             <h3 class="pt-env-title">${esc(env.title)}</h3>
-            ${!env.personal && isFixedEnv ? `<span class="pt-env-lock">${ic("lock")} Área fixa</span>` : ""}
+            <button type="button" class="pt-env-del" data-rename-env="${env.id}">Renomear</button>
           </div>
-          ${!isFixedEnv ? `<button type="button" class="pt-env-del" data-del-env="${env.id}">Excluir espaço</button>` : ""}
+          <button type="button" class="pt-env-del" data-del-env="${env.id}">Excluir espaço</button>
         </div>
         <div class="pt-boards">
           <button type="button" class="pt-add-tile" data-new-board="${env.id}" title="Criar novo quadro em ${esc(env.title)}" aria-label="Criar novo quadro">
@@ -2064,11 +2114,11 @@ function renderPainelHub() {
                     <span class="tr-name">${esc(b.title)}</span>
                   </div>
                 </button>
-                ${!isFixedBoard ? `<button type="button" class="tr-del" data-del-board-hub="${b.id}" title="Excluir quadro" aria-label="Excluir quadro ${esc(b.title)}">×</button>` : ""}
+                <button type="button" class="tr-del" data-del-board-hub="${b.id}" title="Excluir quadro" aria-label="Excluir quadro ${esc(b.title)}">×</button>
               </div>`;
           }).join("")}
         </div>
-        ${env.personal ? `<div><button type="button" class="pt-env-btn" id="btnNewEnv"><span style="font-size:15px;line-height:1">+</span> Criar espaço</button></div>` : ""}
+        
       </div>`;
   }).join("");
 }
@@ -2094,7 +2144,7 @@ function renderActiveBoard() {
   if (!Array.isArray(board.lists)) board.lists = [];
   const env = painelData.envs.find(e => e.id === board.envId);
   const q = norm(kbFilterQuery);
-  const isFixedBoard = Boolean(board.fixed);
+  const isFixedBoard = false;
 
   wrap.innerHTML = `
     <div class="kb-top">
@@ -2114,7 +2164,7 @@ function renderActiveBoard() {
         </button>
         ${board.abaUrl ? `<a href="${esc(board.abaUrl)}" target="_blank" rel="noopener noreferrer" class="pt-sync-btn" style="padding:9px 13px;border-radius:10px;text-decoration:none">↗ Abrir aba</a>` : ""}
         <button type="button" class="kb-new-btn" id="kbNewCardBtn">+ Novo card</button>
-        ${!isFixedBoard ? `<button type="button" class="kb-del-board" id="kbDelBoardBtn">Excluir quadro</button>` : ""}
+        <button type="button" class="kb-del-board" id="kbDelBoardBtn">Excluir quadro</button>
       </div>
     </div>
     <div style="font-size:11px;color:var(--mute);padding:0 4px 9px">Tarefas, títulos, descrições e status: Google Sheets. Checklists, comentários, cronômetro e personalizações visuais: salvos somente neste navegador.</div>
@@ -2193,7 +2243,7 @@ function renderActiveBoard() {
   if (titleEl) {
     titleEl.onblur = () => {
       const novo = titleEl.textContent.trim();
-      if (novo) { board.title = novo; persistBoardToServer(""); }
+      if (novo) { alphaRenameBoard(board,novo); }
       else titleEl.textContent = board.title;
     };
     titleEl.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); titleEl.blur(); } };
@@ -2572,7 +2622,7 @@ function openCardModal(cardId, defaultCol) {
 
     if ($("#cmDeleteBtn")) {
       $("#cmDeleteBtn").onclick = () => {
-        toast("Para excluir definitivamente, remova a linha na aba do Google Sheets.");
+        confirmActionModal("Excluir este card?","A tarefa será removida do Google Sheets. Esta ação não pode ser desfeita.","Excluir card",()=>alphaDeleteCard(board,existing));
       };
     }
     $("#cl").onclick = closeMod;
@@ -2604,9 +2654,9 @@ $("#painelTotvsHub").addEventListener("click", e => {
     e.stopPropagation();
     const id = db.dataset.delBoardHub;
     const targetB = painelData.boards.find(b => b.id === id);
-    if (!targetB || targetB.fixed) return toast("Este quadro é fixo e não pode ser excluído");
+    if (!targetB) return;
     return confirmActionModal(`Excluir quadro "${targetB.title}"?`, "Todos os cards e listas deste quadro serão removidos.", "Excluir quadro", () => {
-      toast("Para excluir um quadro conectado, primeiro remova sua configuração no Google Sheets.");
+      alphaDeleteBoard(targetB);
     });
   }
   const ob = e.target.closest("[data-open-board]");
@@ -2614,13 +2664,15 @@ $("#painelTotvsHub").addEventListener("click", e => {
   const nb = e.target.closest("[data-new-board]");
   if (nb) return openNewBoardModal(nb.dataset.newBoard);
   if (e.target.closest("#btnNewEnv")) return openNewEnvModal();
+ if(e.target.closest("#alphaHubSync"))return syncFromGoogleSheet(false);
+ const re=e.target.closest("[data-rename-env]");if(re)return alphaRenameEnv(painelData.envs.find(x=>x.id===re.dataset.renameEnv));
   const de = e.target.closest("[data-del-env]");
   if (de) {
     const id = de.dataset.delEnv;
     const targetE = painelData.envs.find(x => x.id === id);
-    if (!targetE || targetE.fixed || targetE.personal || id === "env-gov-aprendizes") return toast("Esta área é fixa e não pode ser excluída");
+    if (!targetE)return;
     return confirmActionModal(`Excluir espaço "${targetE.title}"?`, "Todos os quadros dentro deste espaço também serão excluídos.", "Excluir espaço", () => {
-      toast("Exclusão de espaços conectados deve ser feita na aba Espacos da planilha.");
+      alphaDeleteEnv(targetE);
     });
   }
 });
@@ -2672,9 +2724,9 @@ kbWrap.addEventListener("click", e => {
   if (e.target.closest("#kbNewCardBtn")) return openCardModal(null, null);
   if (e.target.closest("#kbDelBoardBtn")) {
     const board = painelData.boards.find(b => b.id === activeBoardId);
-    if (!board || board.fixed) return toast("Este quadro é fixo e não pode ser excluído");
+    if (!board)return;
     return confirmActionModal(`Excluir quadro "${board.title}"?`, "Todos os cards e listas deste quadro serão removidos.", "Excluir quadro", () => {
-      toast("Para excluir um quadro vinculado, remova sua configuração na aba Quadros do Google Sheets.");
+      alphaDeleteBoard(board);
     });
   }
   if (e.target.closest("#kbOpenNewList")) {
