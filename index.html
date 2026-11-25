@@ -1199,6 +1199,13 @@ const ALPHA_STATUS_TO_SHEET = {
 const ALPHA_SHEET_COLORS = ["#00b6ce","#8155df","#02c4d4","#cd20a0","#13a889","#ef8e4a"];
 let alphaShadow = new Map();
 let alphaListsShadow = new Map();
+let alphaDetailsShadow = new Map();
+function alphaDetailId(){return "detail-"+Date.now()+"-"+Math.random().toString(36).slice(2,9);}
+function alphaCanonicalDetails(card){
+ const chk=(card.chk||[]).map(c=>{if(!c.id)c.id=alphaDetailId();return{id:String(c.id),t:String(c.t||""),d:!!c.d};});
+ const comments=(card.comments||[]).map(c=>{if(!c.id)c.id=alphaDetailId();return{id:String(c.id),author:String(c.author||""),at:String(c.at||""),text:String(c.text||"")};});
+ return {chk,comments,elapsedMs:Math.max(0,Number(card.elapsedMs)||0),runningSince:Number(card.runningSince)||null};
+}
 let alphaPersistTimer = null;
 let alphaPersistRunning = false;
 let alphaPersistAgain = false;
@@ -1239,7 +1246,7 @@ function alphaCanonical(card) {
     data:alphaDate(card.due)
   };
 }
-function alphaApplyPayload(estrutura,tarefas) {
+function alphaApplyPayload(estrutura,tarefas,detalhes=[]) {
   const previous=painelData && Array.isArray(painelData.boards)?painelData.boards:[];
   const oldBoards=new Map(previous.map(b=>[b._remoteId||b.id,b]));
   const oldCards=new Map();
@@ -1265,6 +1272,8 @@ function alphaApplyPayload(estrutura,tarefas) {
     };
   });
   const boardMap=new Map(boards.map(b=>[b._remoteId,b]));
+  const detailsMap=new Map((detalhes||[]).map(d=>[d.quadroId+"::"+d.id,d]));
+  const newDetailsShadow=new Map();
   const newShadow=new Map();
   const newListsShadow=new Map();
   boards.forEach(b=>b.lists.forEach((c,i)=>newListsShadow.set(b._remoteId+"::"+c.key,{name:c.name,color:c.color,ordem:i+1})));
@@ -1279,16 +1288,18 @@ function alphaApplyPayload(estrutura,tarefas) {
       mapped=mapped||"status-"+String(t.status||"").replace(/[^\w-]/g,"-").slice(0,60);
       if(!board.lists.some(l=>l.key===mapped))board.lists.push({key:mapped,name:String(t.status||"Sem status"),color:"#7395a4",implicit:true});
     }
+    const remoteDetail=detailsMap.get(t.quadroId+"::"+t.id);
     const card={
       id:t.id,_sheetId:t.id,_boardId:board.id,col:old && old._lastSheetStatus===t.status?old.col:mapped,
       title:t.titulo,desc:t.descricao,
       who:(t.responsavel||"").split(",").map(v=>v.trim()).filter(Boolean).map(ini),
-      due:alphaDate(t.data),chk:old?.chk||[],comments:old?.comments||[],
-      elapsedMs:old?.elapsedMs||0,runningSince:old?.runningSince||null,
+      due:alphaDate(t.data),chk:remoteDetail?.chk||old?.chk||[],comments:remoteDetail?.comments||old?.comments||[],
+      elapsedMs:remoteDetail?.elapsedMs??old?.elapsedMs??0,runningSince:remoteDetail?.runningSince??old?.runningSince??null,
       _responsavel:t.responsavel||"",_solicitante:t.solicitante||"",
       _prioridade:t.prioridade||"Média",_lastSheetStatus:t.status
     };
     board.cards.push(card);
+    newDetailsShadow.set(t.quadroId+"::"+t.id,remoteDetail?alphaCanonicalDetails(remoteDetail):{chk:[],comments:[],elapsedMs:0,runningSince:null});
     newShadow.set(t.quadroId+"::"+t.id,alphaCanonical({...card,col:mapped}));
   });
   boards.forEach(b=>b.cards.sort((a,c)=>{
@@ -1316,6 +1327,7 @@ function alphaApplyPayload(estrutura,tarefas) {
              boards:[...boards,...extraBoards.filter(b=>!boards.some(x=>x.id===b.id))]};
   alphaShadow=newShadow;
   alphaListsShadow=newListsShadow;
+  alphaDetailsShadow=newDetailsShadow;
   savePainelData();
   updateSyncIndicator();
   if(currentRoute==="painel-totvs")renderPainelHub();
@@ -1337,10 +1349,10 @@ function syncFromGoogleSheet(silent=false) {
   alphaLoading=true;
   if(!silent)toast("Sincronizando com Google Sheets...");
   alphaCall("estruturaPainel")
-    .then(estrutura=>alphaCall("listarTarefas").then(tarefas=>({estrutura,tarefas})))
-    .then(({estrutura,tarefas})=>{
+    .then(estrutura=>Promise.all([alphaCall("listarTarefas"),alphaCall("listarDetalhesCards")]).then(([tarefas,detalhes])=>({estrutura,tarefas,detalhes})))
+    .then(({estrutura,tarefas,detalhes})=>{
       sheetConnected=true;alphaLoadedOnce=true;
-      alphaApplyPayload(estrutura,tarefas);
+      alphaApplyPayload(estrutura,tarefas,detalhes);
       if(!silent)toast("Quadros e tarefas sincronizados!");
       if(estrutura.migracao?.avisos?.length)console.warn("Migração:",estrutura.migracao.avisos);
     })
