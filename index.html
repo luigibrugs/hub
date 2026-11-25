@@ -752,6 +752,8 @@ body[data-contrast="maximum"] button:focus-visible,body[data-contrast="high"] bu
 body.alpha-reduce-motion *,body.alpha-reduce-motion *:before,body.alpha-reduce-motion *:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 @media(max-width:720px){body .pt-boards{gap:10px}body .tr-card,body .pt-add-tile{max-width:calc(50vw - 22px);min-width:140px}}
+
+.alpha-easy-guide{display:none;margin:10px 0 16px;padding:14px;border:2px solid var(--cyd);border-radius:12px;background:var(--surface-soft);font-weight:700;font-size:17px;line-height:1.55;color:var(--ink)}.alpha-easy .alpha-easy-guide{display:block}
 </style>
 </head>
 <body class="auth-lock">
@@ -995,7 +997,7 @@ const store = {
 
 
 const ALPHA_A11Y_KEY="alpha-accessibility-v2";
-const ALPHA_A11Y_DEFAULT={cards:1,text:1,ui:1,boards:1,contrast:"normal",easy:false,sounds:false,motion:true};
+const ALPHA_A11Y_DEFAULT={cards:1,text:1,ui:1,boards:2,contrast:"normal",easy:false,sounds:false,motion:true};
 let alphaA11y={...ALPHA_A11Y_DEFAULT,...store.get(ALPHA_A11Y_KEY,{})};
 const alphaScale=(v,min=0,max=4)=>Math.max(min,Math.min(max,Number(v)||0));
 function alphaCardSize(level){alphaA11y.cards=alphaScale(level,0,3);alphaApplyAccessibility();}
@@ -1273,7 +1275,10 @@ function alphaApplyPayload(estrutura,tarefas) {
     if(!board)return;
     const old=oldCards.get(t.quadroId+"::"+t.id)||oldCards.get(board.id+"::"+t.id);
     let mapped=ALPHA_STATUS_FROM_SHEET[t.status]||board.lists.find(l=>l.name===t.status)?.key;
-    if(!mapped){mapped="status-"+String(t.status||"").replace(/[^\w-]/g,"-").slice(0,60);if(!board.lists.some(l=>l.key===mapped))board.lists.push({key:mapped,name:String(t.status||"Sem status"),color:"#7395a4",implicit:true});}
+    if(!mapped||!board.lists.some(l=>l.key===mapped)){
+      mapped=mapped||"status-"+String(t.status||"").replace(/[^\w-]/g,"-").slice(0,60);
+      if(!board.lists.some(l=>l.key===mapped))board.lists.push({key:mapped,name:String(t.status||"Sem status"),color:"#7395a4",implicit:true});
+    }
     const card={
       id:t.id,_sheetId:t.id,_boardId:board.id,col:old && old._lastSheetStatus===t.status?old.col:mapped,
       title:t.titulo,desc:t.descricao,
@@ -1300,6 +1305,11 @@ function alphaApplyPayload(estrutura,tarefas) {
       if(!dest.cards.some(x=>x.id===c.id))dest.cards.push(c);
     });
   });
+  if(boards.some(b=>!remoteEnvs.has((estrutura.quadros||[]).find(q=>q.id===b._remoteId)?.espacoId))){
+    const id="env-orfao";
+    envs.push({id,_remoteId:"__orphan__",title:"Quadros sem espaço — revisar aba Espacos",personal:false,fixed:false,orphan:true});
+    boards.forEach(b=>{const q=(estrutura.quadros||[]).find(x=>x.id===b._remoteId);if(q&&!remoteEnvs.has(q.espacoId))b.envId=id;});
+  }
   const extraEnvs=(painelData.envs||[]).filter(e=>!e._remoteId&&!e.fixed);
   const extraBoards=previous.filter(b=>!b._remoteId&&!b.fixed);
   painelData={envs:[...envs,...extraEnvs.filter(e=>!envs.some(x=>x.id===e.id))],
@@ -1542,6 +1552,7 @@ function handleCardColumnTransition(board, card, prevColKey, nextColKey) {
 
   // 3. Colocou em Resolvido -> para o tempo, registra no card e avisa no Chat
   if (isNextResolvido) {
+    alphaSound("complete");
     if (card.runningSince) {
       card.elapsedMs = (Number(card.elapsedMs) || 0) + Math.max(0, Date.now() - Number(card.runningSince));
       card.runningSince = null;
@@ -1578,6 +1589,15 @@ setInterval(() => {
     if (txtEl) txtEl.textContent = formatDuration(getCardElapsedMs(c));
   });
 }, 1000);
+
+
+/* Atualiza edições feitas diretamente na planilha sem exigir recarregar o site. */
+setInterval(()=>{
+  if(!alphaLoadedOnce||alphaLoading||alphaPersistRunning||alphaPersistTimer)return;
+  if(document.body.classList.contains("auth-lock"))return;
+  if($("#mod")?.classList.contains("open"))return;
+  syncFromGoogleSheet(true);
+},20000);
 
 // ==================== 3. DADOS INICIAIS ====================
 const ADM_CONTATOS = [
@@ -2222,7 +2242,7 @@ function renderPainelHub() {
   updateSyncIndicator();
   const hub = $("#painelTotvsHub");
   if (!hub) return;
-  hub.innerHTML = `<div class="alpha-hub-actions"><button type="button" class="pt-env-btn" id="btnNewEnv">+ Criar espaço</button><button type="button" class="pt-env-btn" id="alphaHubSync">↻ Atualizar dados</button></div>` + painelData.envs.map((env, eIdx) => {
+  hub.innerHTML = `<div class="alpha-easy-guide">1. Escolha um espaço, 2. abra um quadro, 3. clique em um card para editar ou em + Criar quadro.</div><div class="alpha-hub-actions"><button type="button" class="pt-env-btn" id="btnNewEnv">+ Criar espaço</button><button type="button" class="pt-env-btn" id="alphaHubSync">↻ Atualizar dados</button></div>` + painelData.envs.map((env, eIdx) => {
     const boards = painelData.boards.filter(b => b.envId === env.id);
     const isFixedEnv = false;
     return `
@@ -2284,7 +2304,7 @@ function renderActiveBoard() {
   const isFixedBoard = false;
 
   wrap.innerHTML = `
-    <div class="kb-top">
+    <div class="alpha-easy-guide">Para criar, clique em + Novo card. Para editar, clique no card. Para mover, arraste para outra coluna. Para excluir, abra o card e clique em Excluir card.</div><div class="kb-top">
       <div class="kb-title-wrap">
         <span class="kb-dot" style="background:${board.color || "#00DBFF"}"></span>
         <h2 class="kb-title" id="kbBoardTitle" contenteditable="true" spellcheck="false" title="Nome visual do quadro (somente neste dispositivo)">${esc(board.title)}</h2>
@@ -2499,7 +2519,7 @@ function submitQuickCard(colKey) {
   persistBoardToServer(chatMsg);
   quickAddCol = null;
   renderActiveBoard();
-  toast("Card criado!");
+  alphaSound("create");toast("Card criado!");
 }
 
 function openNewBoardModal(envId) {
@@ -2544,7 +2564,7 @@ function openNewBoardModal(envId) {
     persistBoardToServer("");
     closeMod();
     renderPainelHub();
-    toast("Quadro criado: " + title);
+    alphaSound("create");toast("Quadro criado: " + title);
   };
   $("#nbSave").onclick = create;
   $("#nbTitle").onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); create(); } };
@@ -2572,7 +2592,7 @@ function openNewEnvModal() {
     persistBoardToServer("");
     closeMod();
     renderPainelHub();
-    toast("Espaço criado!");
+    alphaSound("create");toast("Espaço criado!");
   };
   $("#neSave").onclick = create;
   $("#neTitle").onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); create(); } };
