@@ -236,7 +236,7 @@ function localizarCard_(id,quadroId) {
   return {aba,linha:hits[0]};
 }
 function atualizarStatus(id,status,quadroId) {
-  if(!STATUS_VALIDOS.includes(status))throw new Error('Status inválido');
+  if(!status||String(status).length>80)throw new Error('Status inválido');
   const lock=trava_();
   try {
     preparar_();
