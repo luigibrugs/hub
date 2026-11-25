@@ -705,7 +705,7 @@ body[data-card-size="3"] .kb-card-foot,body[data-card-size="3"] .alpha-priority-
 .alpha-autosave-info{font-size:11px;color:var(--mute);margin:8px 0 0}
 
 /* Escalas de acessibilidade: layout original preservado */
-body{--alpha-a11y-font:1;--alpha-ui-mult:1;--alpha-board-mult:1}
+body{--alpha-a11y-font:1;--alpha-ui-mult:1;--alpha-board-mult:1;--alpha-card-extra:1}
 body[data-text-level="1"]{--alpha-a11y-font:1.10}
 body[data-text-level="2"]{--alpha-a11y-font:1.22}
 body[data-text-level="3"]{--alpha-a11y-font:1.38}
@@ -761,6 +761,12 @@ body[data-contrast="high"]::before,body[data-contrast="maximum"]::before{display
 body[data-contrast="high"] .glass,body[data-contrast="maximum"] .glass{backdrop-filter:none}
 body.alpha-easy .pt-env-del,body.alpha-easy .tr-del,body.alpha-easy .kb-col-del{font-weight:800}
 button:focus-visible,a:focus-visible,[role="button"]:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--cyd);outline-offset:3px}
+
+body[data-card-size="0"]{--alpha-card-extra:.95}
+body[data-card-size="1"]{--alpha-card-extra:1}
+body[data-card-size="2"]{--alpha-card-extra:1.08}
+body[data-card-size="3"]{--alpha-card-extra:1.18}
+body .kb-card-title{font-size:calc(14px * var(--alpha-a11y-font) * var(--alpha-card-extra))!important}
 </style>
 </head>
 <body class="auth-lock">
@@ -1299,7 +1305,7 @@ function alphaApplyPayload(estrutura,tarefas,detalhes=[]) {
     let mapped=ALPHA_STATUS_FROM_SHEET[t.status]||board.lists.find(l=>l.name===t.status)?.key;
     if(!mapped||!board.lists.some(l=>l.key===mapped)){
       mapped=mapped||"status-"+String(t.status||"").replace(/[^\w-]/g,"-").slice(0,60);
-      if(!board.lists.some(l=>l.key===mapped))board.lists.push({key:mapped,name:String(t.status||"Sem status"),color:"#7395a4",implicit:true});
+      if(!board.lists.some(l=>l.key===mapped))board.lists.push({key:mapped,name:"Sem lista — "+String(t.status||"sem status"),color:"#7395a4",implicit:true});
     }
     const remoteDetail=detailsMap.get(t.quadroId+"::"+t.id);
     const card={
@@ -2865,7 +2871,7 @@ $("#painelTotvsHub").addEventListener("click", e => {
     const id = db.dataset.delBoardHub;
     const targetB = painelData.boards.find(b => b.id === id);
     if (!targetB) return;
-    return confirmActionModal(`Excluir quadro "${targetB.title}"?`, "Todos os cards e listas deste quadro serão removidos.", "Excluir quadro", () => {
+    return confirmActionModal(`Excluir quadro "${targetB.title}"?`, "A aba deste quadro, todas as listas, cards e informações serão excluídos da planilha. Esta ação não pode ser desfeita pelo HUB.", "Excluir quadro", () => {
       alphaDeleteBoard(targetB);
     });
   }
@@ -2881,7 +2887,7 @@ $("#painelTotvsHub").addEventListener("click", e => {
     const id = de.dataset.delEnv;
     const targetE = painelData.envs.find(x => x.id === id);
     if (!targetE)return;
-    return confirmActionModal(`Excluir espaço "${targetE.title}"?`, "Todos os quadros dentro deste espaço também serão excluídos.", "Excluir espaço", () => {
+    return confirmActionModal(`Excluir espaço "${targetE.title}"?`, "ATENÇÃO: todos os quadros, abas e tarefas deste espaço serão excluídos da planilha. A ação não pode ser desfeita pelo HUB.", "Excluir espaço", () => {
       alphaDeleteEnv(targetE);
     });
   }
@@ -2955,7 +2961,7 @@ kbWrap.addEventListener("click", e => {
     const key = dl.dataset.delList;
     const lst = board.lists.find(l => l.key === key);
     if (!lst) return;
-    return confirmActionModal(`Excluir lista "${lst.name}"?`, "Todos os cards dentro desta lista também serão removidos.", "Excluir lista", () => {
+    return confirmActionModal(`Excluir lista "${lst.name}"?`, "Os cards desta lista, seus comentários, checklists e registros serão excluídos da planilha. Esta ação não pode ser desfeita pelo HUB.", "Excluir lista", () => {
       alphaDeleteList(board,lst);
     });
   }
