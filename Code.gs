@@ -48,11 +48,15 @@ function nomeAbaSugerido_(nome,id) {
 function iniciarEstrutura_() {
   const espacos=obterOuCriar_(ESPACOS_ABA,['ID','NOME','FIXO']);
   const quadros=obterOuCriar_(QUADROS_ABA,['ID','ESPACO_ID','NOME','COR','PLANILHA_ID_LEGADO','ABA_TAREFAS']);
-  if (espacos.getLastRow()===1) espacos.getRange(2,1,2,3).setValues([
+  // Após a primeira inicialização, excluir todas as linhas NÃO recria dados padrão.
+  const bootstrap=PropertiesService.getScriptProperties();
+  const initialized='HUB_ESTRUTURA_INICIALIZADA_'+PLANILHA_ID;
+  const firstRun=bootstrap.getProperty(initialized)!=='sim';
+  if (firstRun && espacos.getLastRow()===1) espacos.getRange(2,1,2,3).setValues([
     [ESPACO_PESSOAL,'O que vamos criar hoje?',false],
     [ESPACO_FIXO,'Governança Corporativa - Núcleo de Aprendizes',true]
   ]);
-  if (quadros.getLastRow()===1) quadros.getRange(2,1,3,6).setValues([
+  if (firstRun && quadros.getLastRow()===1) quadros.getRange(2,1,3,6).setValues([
     [QUADRO_PADRAO,ESPACO_FIXO,'Administrativo','#00b6ce','','Administração'],
     ['quadro-transformacao',ESPACO_FIXO,'Transformação Digital','#8155df','','Transformação Digital'],
     ['quadro-atendimento',ESPACO_FIXO,'Atendimento VIP - TI','#02c4d4','','Suporte VIP']
@@ -80,6 +84,7 @@ function iniciarEstrutura_() {
     });
     if(alterou)quadros.getRange(2,1,qtd,6).setValues(linhas);
   }
+  bootstrap.setProperty(initialized,'sim');
   return {espacos,quadros};
 }
 function obterQuadros_() {
@@ -374,4 +379,91 @@ function diagnosticarIntegracao() {
   }catch(e){resultado.erros.push('Acesso: '+e.message);}
   Logger.log(JSON.stringify(resultado,null,2));
   return resultado;
+}
+
+
+/** Exclui um card real da aba deste quadro. Não toca nas outras abas. */
+function excluirTarefa(dados) {
+  const id=String(dados&&dados.id||'').trim();
+  const quadroId=String(dados&&dados.quadroId||'').trim();
+  if(!id||!quadroId)throw new Error('Informe o card e o quadro.');
+  const lock=trava_();
+  try {
+    preparar_();
+    const x=localizarCard_(id,quadroId);
+    x.aba.deleteRow(x.linha);
+    return {sucesso:true,id};
+  }finally{lock.releaseLock();}
+}
+/** Exclui quadro, tarefas e a aba exclusiva, após validação de propriedade. */
+function excluirQuadro(quadroId) {
+  quadroId=String(quadroId||'').trim();
+  const lock=trava_();
+  try {
+    preparar_();
+    const q=obterQuadros_().find(x=>x.id===quadroId);
+    if(!q)throw new Error('Quadro não encontrado.');
+    const ss=planilha_();
+    const meta=ss.getSheetByName(QUADROS_ABA);
+    const tab=ss.getSheetByName(q.aba);
+    const usedElsewhere=obterQuadros_().some(x=>x.id!==q.id&&x.aba===q.aba);
+    if(usedElsewhere)throw new Error('A aba também está vinculada a outro quadro.');
+    if([ABA,ESPACOS_ABA,QUADROS_ABA].includes(q.aba))throw new Error('Aba de configuração reservada.');
+    // Nunca exclui aba sem a confirmação de que pertence ao quadro.
+    if(!tab)throw new Error('Aba vinculada não encontrada. Corrija a planilha antes de excluir.');
+    meta.deleteRow(q.linha);
+    ss.deleteSheet(tab);
+    return {sucesso:true,id:quadroId};
+  }finally{lock.releaseLock();}
+}
+/** Exclui espaço e todos os quadros e abas associados (cascata). */
+function excluirEspaco(espacoId) {
+  espacoId=String(espacoId||'').trim();
+  const lock=trava_();
+  try {
+    preparar_();
+    const ss=planilha_(),esp=ss.getSheetByName(ESPACOS_ABA);
+    const rows=esp.getLastRow()>1?esp.getRange(2,1,esp.getLastRow()-1,1).getValues():[];
+    const pos=rows.findIndex(x=>String(x[0])===espacoId);
+    if(pos<0)throw new Error('Espaço não encontrado.');
+    const attached=obterQuadros_().filter(q=>q.espacoId===espacoId);
+    const all=obterQuadros_();
+    for(const q of attached) {
+      if(!ss.getSheetByName(q.aba))throw new Error('Aba "'+q.aba+'" não encontrada.');
+      if(all.some(other=>other.id!==q.id&&other.aba===q.aba))throw new Error('Aba compartilhada: '+q.aba);
+      if([ABA,ESPACOS_ABA,QUADROS_ABA].includes(q.aba))throw new Error('Aba reservada: '+q.aba);
+    }
+    const metadata=ss.getSheetByName(QUADROS_ABA);
+    attached.sort((a,b)=>b.linha-a.linha).forEach(q=>metadata.deleteRow(q.linha));
+    attached.forEach(q=>ss.deleteSheet(ss.getSheetByName(q.aba)));
+    esp.deleteRow(pos+2);
+    return {sucesso:true,id:espacoId,quadrosExcluidos:attached.length};
+  }finally{lock.releaseLock();}
+}
+/** Renomeia quadro mantendo o nome da aba e a associação da planilha. */
+function renomearQuadro(dados) {
+  const id=String(dados&&dados.id||''),nome=String(dados&&dados.nome||'').trim();
+  if(!nome||nome.length>70)throw new Error('Nome inválido.');
+  const lock=trava_();
+  try{
+    preparar_();
+    const q=obterQuadros_().find(x=>x.id===id);
+    if(!q)throw new Error('Quadro não encontrado.');
+    planilha_().getSheetByName(QUADROS_ABA).getRange(q.linha,3).setValue(nome);
+    return {sucesso:true,id,nome};
+  }finally{lock.releaseLock();}
+}
+function renomearEspaco(dados) {
+  const id=String(dados&&dados.id||''),nome=String(dados&&dados.nome||'').trim();
+  if(!nome||nome.length>70)throw new Error('Nome inválido.');
+  const lock=trava_();
+  try {
+    preparar_();
+    const sheet=planilha_().getSheetByName(ESPACOS_ABA);
+    const all=sheet.getLastRow()>1?sheet.getRange(2,1,sheet.getLastRow()-1,1).getValues():[];
+    const idx=all.findIndex(x=>String(x[0])===id);
+    if(idx<0)throw new Error('Espaço não encontrado.');
+    sheet.getRange(idx+2,2).setValue(nome);
+    return {sucesso:true,id,nome};
+  }finally{lock.releaseLock();}
 }
