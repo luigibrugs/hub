@@ -4,7 +4,7 @@
  * Quadros e Espacos são abas de configuração.
  * Tarefas é mantida como arquivo legado (backup, não apagado).
  */
-const PLANILHA_ID = '1VGvYnKPllv3rHFhq0MzYFCdj0hJglW45pQ5mHUEceUo';
+const PLANILHA_ID = '16Tu5wve7bFeS0adr0PuUhs0Mf7Jgn6AQEm2Shz0XJQQ';
 const ABA = 'Tarefas';
 const ESPACOS_ABA = 'Espacos';
 const QUADROS_ABA = 'Quadros';
