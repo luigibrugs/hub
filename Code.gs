@@ -8,11 +8,16 @@ const PLANILHA_ID = '16Tu5wve7bFeS0adr0PuUhs0Mf7Jgn6AQEm2Shz0XJQQ';
 const ABA = 'Tarefas';
 const ESPACOS_ABA = 'Espacos';
 const QUADROS_ABA = 'Quadros';
+const LISTAS_ABA = 'Listas';
+const CHECKLIST_ABA = 'Checklist';
+const COMENTARIOS_ABA = 'Comentarios';
+const CRONOMETROS_ABA = 'Cronometros';
 const ESPACO_FIXO = 'nucleo-aprendizagem';
 const ESPACO_PESSOAL = 'meus-quadros';
 const QUADRO_PADRAO = 'quadro-administrativo';
 const CAMPOS_TAREFA = ['ID','TÍTULO','DESCRIÇÃO','RESPONSÁVEL','SOLICITANTE','PRIORIDADE','STATUS','DATA'];
 const STATUS_VALIDOS = ['Backlog','Em progresso','Revisão','Concluído'];
+const LISTAS_PADRAO = [['backlog','Backlog','#00DBFF'],['progresso','Em progresso','#A44DFF'],['espera','Revisão','#FF8900'],['resolvido','Concluído','#00FFD4']];
 const RESPONSAVEIS_FIXOS = [
   'Luiz Carlos','Luigi Trintoni','Gabriela Feitosa','Guilherme Crisostomo',
   'Ana Clara','Luiza Santos','Letícia de Souza','Leonardo dos Santos',
@@ -48,23 +53,56 @@ function nomeAbaSugerido_(nome,id) {
 function iniciarEstrutura_() {
   const espacos=obterOuCriar_(ESPACOS_ABA,['ID','NOME','FIXO']);
   const quadros=obterOuCriar_(QUADROS_ABA,['ID','ESPACO_ID','NOME','COR','PLANILHA_ID_LEGADO','ABA_TAREFAS']);
-  if (espacos.getLastRow()===1) espacos.getRange(2,1,2,3).setValues([
+  const listas=obterOuCriar_(LISTAS_ABA,['QUADRO_ID','CHAVE','NOME','COR','ORDEM']);
+  obterOuCriar_(CHECKLIST_ABA,['QUADRO_ID','CARD_ID','ITEM_ID','TEXTO','CONCLUIDO','ORDEM']);
+  obterOuCriar_(COMENTARIOS_ABA,['QUADRO_ID','CARD_ID','COMENTARIO_ID','AUTOR','DATA','TEXTO']);
+  obterOuCriar_(CRONOMETROS_ABA,['QUADRO_ID','CARD_ID','TEMPO_MS','INICIO_TS']);
+  // Após a primeira inicialização, excluir todas as linhas NÃO recria dados padrão.
+  const bootstrap=PropertiesService.getScriptProperties();
+  const initialized='HUB_ESTRUTURA_INICIALIZADA_'+PLANILHA_ID;
+  const firstRun=bootstrap.getProperty(initialized)!=='sim';
+  if (firstRun && espacos.getLastRow()===1) espacos.getRange(2,1,2,3).setValues([
     [ESPACO_PESSOAL,'O que vamos criar hoje?',false],
     [ESPACO_FIXO,'Governança Corporativa - Núcleo de Aprendizes',true]
   ]);
-  if (quadros.getLastRow()===1) quadros.getRange(2,1,3,6).setValues([
+  if (firstRun && quadros.getLastRow()===1) quadros.getRange(2,1,3,6).setValues([
     [QUADRO_PADRAO,ESPACO_FIXO,'Administrativo','#00b6ce','','Administração'],
     ['quadro-transformacao',ESPACO_FIXO,'Transformação Digital','#8155df','','Transformação Digital'],
     ['quadro-atendimento',ESPACO_FIXO,'Atendimento VIP - TI','#02c4d4','','Suporte VIP']
   ]);
   quadros.getRange(1,5,1,2).setValues([['PLANILHA_ID_LEGADO','ABA_TAREFAS']]);
+  // Primeira adaptação da planilha: oferece quatro listas para cada quadro existente.
+  // Depois disso, qualquer remoção em Listas será respeitada.
+  const listasKey='HUB_LISTAS_INICIALIZADAS_'+PLANILHA_ID;
+  if(bootstrap.getProperty(listasKey)!=='sim'){
+    if(listas.getLastRow()===1&&quadros.getLastRow()>1){
+      const ids=quadros.getRange(2,1,quadros.getLastRow()-1,1).getValues().flat().map(String);
+      const rows=[];ids.forEach(id=>LISTAS_PADRAO.forEach((c,i)=>rows.push([id,c[0],c[1],c[2],i+1])));
+      if(rows.length)listas.getRange(2,1,rows.length,5).setValues(rows);
+    }
+    bootstrap.setProperty(listasKey,'sim');
+  }
+  // Permite criar espaços/quadros diretamente nas abas de configuração sem gerar UUID à mão.
+  if(espacos.getLastRow()>1){
+    const n=espacos.getLastRow()-1,v=espacos.getRange(2,1,n,3).getValues();
+    let dirty=false;
+    v.forEach(row=>{if(!String(row[0]||'').trim()&&String(row[1]||'').trim()){row[0]=Utilities.getUuid();dirty=true;}});
+    if(dirty)espacos.getRange(2,1,n,3).setValues(v);
+  }
   const qtd=quadros.getLastRow()-1;
   if (qtd>0) {
     const linhas=quadros.getRange(2,1,qtd,6).getValues();
-    const usados=new Set();
-    const reservados=new Set([ABA,ESPACOS_ABA,QUADROS_ABA]);
+    const defaultEspaco=espacos.getLastRow()>1?String(espacos.getRange(2,1).getValue()):'';
     let alterou=false;
+    linhas.forEach(l=>{
+      if(!String(l[2]||'').trim())return;
+      if(!String(l[0]||'').trim()){l[0]=Utilities.getUuid();alterou=true;}
+      if(!String(l[1]||'').trim()&&defaultEspaco){l[1]=defaultEspaco;alterou=true;}
+    });
+    const usados=new Set();
+    const reservados=new Set([ABA,ESPACOS_ABA,QUADROS_ABA,LISTAS_ABA,CHECKLIST_ABA,COMENTARIOS_ABA,CRONOMETROS_ABA]);
     linhas.forEach((linha,i)=>{
+      if(!String(linha[2]||'').trim())return;
       let nome=String(linha[5]||'').trim();
       if (!nome || usados.has(nome.toLowerCase()) || reservados.has(nome)) {
         const base=nomeAbaSugerido_(linha[2],linha[0]);
@@ -80,6 +118,20 @@ function iniciarEstrutura_() {
     });
     if(alterou)quadros.getRange(2,1,qtd,6).setValues(linhas);
   }
+  if(listas.getLastRow()>1){
+    const n=listas.getLastRow()-1,rows=listas.getRange(2,1,n,5).getValues();
+    let changed=false;
+    const firstBoard=quadros.getLastRow()>1?String(quadros.getRange(2,1).getValue()):'';
+    rows.forEach((row,i)=>{
+      if(!String(row[2]||'').trim())return;
+      if(!String(row[0]||'').trim()&&firstBoard){row[0]=firstBoard;changed=true;}
+      if(!String(row[1]||'').trim()){row[1]='lst-'+Utilities.getUuid();changed=true;}
+      if(!row[3]){row[3]='#00DBFF';changed=true;}
+      if(!row[4]){row[4]=i+1;changed=true;}
+    });
+    if(changed)listas.getRange(2,1,n,5).setValues(rows);
+  }
+  bootstrap.setProperty(initialized,'sim');
   return {espacos,quadros};
 }
 function obterQuadros_() {
@@ -89,7 +141,7 @@ function obterQuadros_() {
     id:String(r[0]),espacoId:String(r[1]),nome:String(r[2]),
     cor:String(r[3]||'#00b6ce'),legado:String(r[4]||''),
     aba:String(r[5]||''),linha:i+2
-  }));
+  })).filter(q=>q.id&&q.nome);
 }
 function abaQuadro_(id) {
   const q=obterQuadros_().find(q=>q.id===String(id));
@@ -173,7 +225,9 @@ function estruturaPainel() {
       id:String(r[0]),nome:String(r[1]),fixo:r[2]===true||String(r[2])==='true'
     }));
     const ss=planilha_();
-    return {espacos,quadros:obterQuadros_().map(q=>({
+    const l=planilha_().getSheetByName(LISTAS_ABA);
+    const listas=l&&l.getLastRow()>1?l.getRange(2,1,l.getLastRow()-1,5).getValues().filter(r=>r[0]&&r[1]).map(r=>({quadroId:String(r[0]),key:String(r[1]),name:String(r[2]),color:String(r[3]||'#00DBFF'),ordem:Number(r[4])||0})):[];
+    return {espacos,listas,quadros:obterQuadros_().map(q=>({
       id:q.id,espacoId:q.espacoId,nome:q.nome,cor:q.cor,
       aba:q.aba,abaUrl:ss.getUrl()+'#gid='+abaQuadro_(q.id).getSheetId()
     })),migracao};
@@ -215,7 +269,7 @@ function localizarCard_(id,quadroId) {
   return {aba,linha:hits[0]};
 }
 function atualizarStatus(id,status,quadroId) {
-  if(!STATUS_VALIDOS.includes(status))throw new Error('Status inválido');
+  if(!status||String(status).length>80)throw new Error('Status inválido');
   const lock=trava_();
   try {
     preparar_();
@@ -246,7 +300,7 @@ function salvarTarefa(dados) {
   const t=String(dados.data||'');
   const p=/^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
   if(!id||!titulo||titulo.length>500||descricao.length>10000)throw new Error('Revise o ID, título ou descrição.');
-  if(!STATUS_VALIDOS.includes(status))throw new Error('Status inválido.');
+  if(!status||status.length>80)throw new Error('Status inválido.');
   if(!p)throw new Error('Data inválida.');
   const dt=new Date(Number(p[1]),Number(p[2])-1,Number(p[3]),12);
   if(dt.getFullYear()!==Number(p[1])||dt.getMonth()!==Number(p[2])-1||dt.getDate()!==Number(p[3]))throw new Error('Data inválida.');
@@ -290,6 +344,8 @@ function criarQuadro(dados) {
     while(usados.has(abaNome.toLowerCase()))abaNome=base.slice(0,85)+' '+n++;
     const aba=obterOuCriar_(abaNome,CAMPOS_TAREFA);
     planilha_().getSheetByName(QUADROS_ABA).appendRow([id,espacoId,nome,cor,'',abaNome]);
+    const listas=planilha_().getSheetByName(LISTAS_ABA);
+    LISTAS_PADRAO.forEach((c,i)=>listas.appendRow([id,c[0],c[1],c[2],i+1]));
     return {id,espacoId,nome,cor,aba:abaNome,abaUrl:planilha_().getUrl()+'#gid='+aba.getSheetId()};
   }finally{lock.releaseLock();}
 }
@@ -331,7 +387,7 @@ function configurarAbaQuadro(dados) {
     const q=obterQuadros_().find(x=>x.id===quadroId);
     if(!q)throw new Error('Quadro inexistente');
     const destino=resolverAbaExistente_(dados&&dados.aba);
-    if([ABA,ESPACOS_ABA,QUADROS_ABA].includes(destino.getName()))throw new Error('Aba reservada para configurações ou backup.');
+    if([ABA,ESPACOS_ABA,QUADROS_ABA,LISTAS_ABA,CHECKLIST_ABA,COMENTARIOS_ABA,CRONOMETROS_ABA].includes(destino.getName()))throw new Error('Aba reservada para configurações ou backup.');
     if(obterQuadros_().some(x=>x.id!==quadroId&&x.aba===destino.getName()))throw new Error('Essa aba já pertence a outro quadro.');
     validarCabecalho_(destino);
     const antiga=abaQuadro_(quadroId);
@@ -374,4 +430,242 @@ function diagnosticarIntegracao() {
   }catch(e){resultado.erros.push('Acesso: '+e.message);}
   Logger.log(JSON.stringify(resultado,null,2));
   return resultado;
+}
+
+
+/** Exclui um card real da aba deste quadro. Não toca nas outras abas. */
+function excluirTarefa(dados) {
+  const id=String(dados&&dados.id||'').trim();
+  const quadroId=String(dados&&dados.quadroId||'').trim();
+  if(!id||!quadroId)throw new Error('Informe o card e o quadro.');
+  const lock=trava_();
+  try {
+    preparar_();
+    const x=localizarCard_(id,quadroId);
+    x.aba.deleteRow(x.linha);
+    limparDetalhes_(quadroId,id);
+    return {sucesso:true,id};
+  }finally{lock.releaseLock();}
+}
+/** Exclui quadro, tarefas e a aba exclusiva, após validação de propriedade. */
+function excluirQuadro(quadroId) {
+  quadroId=String(quadroId||'').trim();
+  const lock=trava_();
+  try {
+    preparar_();
+    const q=obterQuadros_().find(x=>x.id===quadroId);
+    if(!q)throw new Error('Quadro não encontrado.');
+    const ss=planilha_();
+    const meta=ss.getSheetByName(QUADROS_ABA);
+    const tab=ss.getSheetByName(q.aba);
+    const usedElsewhere=obterQuadros_().some(x=>x.id!==q.id&&x.aba===q.aba);
+    if(usedElsewhere)throw new Error('A aba também está vinculada a outro quadro.');
+    if([ABA,ESPACOS_ABA,QUADROS_ABA,LISTAS_ABA,CHECKLIST_ABA,COMENTARIOS_ABA,CRONOMETROS_ABA].includes(q.aba))throw new Error('Aba de configuração reservada.');
+    // Nunca exclui aba sem a confirmação de que pertence ao quadro.
+    if(!tab)throw new Error('Aba vinculada não encontrada. Corrija a planilha antes de excluir.');
+    meta.deleteRow(q.linha);
+    limparDetalhes_(quadroId,null);
+    const listas=ss.getSheetByName(LISTAS_ABA);
+    if(listas&&listas.getLastRow()>1){const v=listas.getRange(2,1,listas.getLastRow()-1,1).getValues();for(let i=v.length-1;i>=0;i--)if(String(v[i][0])===quadroId)listas.deleteRow(i+2);}
+    ss.deleteSheet(tab);
+    return {sucesso:true,id:quadroId};
+  }finally{lock.releaseLock();}
+}
+/** Exclui espaço e todos os quadros e abas associados (cascata). */
+function excluirEspaco(espacoId) {
+  espacoId=String(espacoId||'').trim();
+  const lock=trava_();
+  try {
+    preparar_();
+    const ss=planilha_(),esp=ss.getSheetByName(ESPACOS_ABA);
+    const rows=esp.getLastRow()>1?esp.getRange(2,1,esp.getLastRow()-1,1).getValues():[];
+    const pos=rows.findIndex(x=>String(x[0])===espacoId);
+    if(pos<0)throw new Error('Espaço não encontrado.');
+    const attached=obterQuadros_().filter(q=>q.espacoId===espacoId);
+    const all=obterQuadros_();
+    for(const q of attached) {
+      if(!ss.getSheetByName(q.aba))throw new Error('Aba "'+q.aba+'" não encontrada.');
+      if(all.some(other=>other.id!==q.id&&other.aba===q.aba))throw new Error('Aba compartilhada: '+q.aba);
+      if([ABA,ESPACOS_ABA,QUADROS_ABA,LISTAS_ABA,CHECKLIST_ABA,COMENTARIOS_ABA,CRONOMETROS_ABA].includes(q.aba))throw new Error('Aba reservada: '+q.aba);
+    }
+    const metadata=ss.getSheetByName(QUADROS_ABA);
+    attached.sort((a,b)=>b.linha-a.linha).forEach(q=>metadata.deleteRow(q.linha));
+    attached.forEach(q=>limparDetalhes_(q.id,null));
+    const listas=ss.getSheetByName(LISTAS_ABA);
+    if(listas&&listas.getLastRow()>1){const v=listas.getRange(2,1,listas.getLastRow()-1,1).getValues();for(let i=v.length-1;i>=0;i--)if(attached.some(q=>q.id===String(v[i][0])))listas.deleteRow(i+2);}
+    attached.forEach(q=>ss.deleteSheet(ss.getSheetByName(q.aba)));
+    esp.deleteRow(pos+2);
+    return {sucesso:true,id:espacoId,quadrosExcluidos:attached.length};
+  }finally{lock.releaseLock();}
+}
+/** Renomeia quadro mantendo o nome da aba e a associação da planilha. */
+function renomearQuadro(dados) {
+  const id=String(dados&&dados.id||''),nome=String(dados&&dados.nome||'').trim();
+  if(!nome||nome.length>70)throw new Error('Nome inválido.');
+  const lock=trava_();
+  try{
+    preparar_();
+    const q=obterQuadros_().find(x=>x.id===id);
+    if(!q)throw new Error('Quadro não encontrado.');
+    planilha_().getSheetByName(QUADROS_ABA).getRange(q.linha,3).setValue(nome);
+    return {sucesso:true,id,nome};
+  }finally{lock.releaseLock();}
+}
+function renomearEspaco(dados) {
+  const id=String(dados&&dados.id||''),nome=String(dados&&dados.nome||'').trim();
+  if(!nome||nome.length>70)throw new Error('Nome inválido.');
+  const lock=trava_();
+  try {
+    preparar_();
+    const sheet=planilha_().getSheetByName(ESPACOS_ABA);
+    const all=sheet.getLastRow()>1?sheet.getRange(2,1,sheet.getLastRow()-1,1).getValues():[];
+    const idx=all.findIndex(x=>String(x[0])===id);
+    if(idx<0)throw new Error('Espaço não encontrado.');
+    sheet.getRange(idx+2,2).setValue(nome);
+    return {sucesso:true,id,nome};
+  }finally{lock.releaseLock();}
+}
+
+
+/** Lista/coluna Kanban editável pela aba Listas do Google Sheets. */
+function salvarLista(dados) {
+  const quadroId=String(dados&&dados.quadroId||'').trim(),key=String(dados&&dados.key||'').trim();
+  const name=String(dados&&dados.name||'').trim();
+  const color=String(dados&&dados.color||'#00DBFF');
+  const ordem=Number(dados&&dados.ordem)||1;
+  if(!quadroId||!key||!name||key.length>90||name.length>80)throw new Error('Dados inválidos da lista.');
+  if(!/^#[0-9a-fA-F]{6}$/.test(color))throw new Error('Cor inválida.');
+  const lock=trava_();
+  try{
+    preparar_();
+    if(!obterQuadros_().some(q=>q.id===quadroId))throw new Error('Quadro não encontrado.');
+    const sheet=planilha_().getSheetByName(LISTAS_ABA);
+    const last=sheet.getLastRow();
+    const rows=last>1?sheet.getRange(2,1,last-1,5).getValues():[];
+    const index=rows.findIndex(r=>String(r[0])===quadroId&&String(r[1])===key);
+    if(rows.some((r,i)=>i!==index&&String(r[0])===quadroId&&String(r[2]).toLowerCase()===name.toLowerCase()))throw new Error('Nome de lista já usado.');
+    if(index>=0){
+      const oldName=String(rows[index][2]);
+      sheet.getRange(index+2,1,1,5).setValues([[quadroId,key,name,color,ordem]]);
+      if(oldName!==name&&!['backlog','progresso','espera','resolvido'].includes(key)){
+        const tasks=abaQuadro_(quadroId),n=tasks.getLastRow();
+        if(n>1){
+          const st=tasks.getRange(2,7,n-1,1),v=st.getValues();
+          let changed=false;
+          v.forEach(r=>{if(String(r[0])===oldName){r[0]=name;changed=true;}});
+          if(changed)st.setValues(v);
+        }
+      }
+    }else sheet.appendRow([quadroId,key,name,color,ordem]);
+    return {sucesso:true,quadroId,key,name,color,ordem};
+  }finally{lock.releaseLock();}
+}
+function excluirLista(dados) {
+  const quadroId=String(dados&&dados.quadroId||'').trim(),key=String(dados&&dados.key||'').trim();
+  const lock=trava_();
+  try{
+    preparar_();
+    const sheet=planilha_().getSheetByName(LISTAS_ABA),last=sheet.getLastRow();
+    const rows=last>1?sheet.getRange(2,1,last-1,5).getValues():[];
+    const i=rows.findIndex(r=>String(r[0])===quadroId&&String(r[1])===key);
+    if(i<0)throw new Error('Lista não encontrada.');
+    const name=String(rows[i][2]);
+    const status={backlog:'Backlog',progresso:'Em progresso',espera:'Revisão',resolvido:'Concluído'}[key]||name;
+    const tab=abaQuadro_(quadroId),lastTask=tab.getLastRow();
+    let deleted=0;
+    if(lastTask>1){
+      const values=tab.getRange(2,7,lastTask-1,1).getValues();
+      for(let row=values.length-1;row>=0;row--){
+        if(String(values[row][0])===status){
+          const cardId=String(tab.getRange(row+2,1).getValue());
+          tab.deleteRow(row+2);limparDetalhes_(quadroId,cardId);deleted++;
+        }
+      }
+    }
+    sheet.deleteRow(i+2);
+    return {sucesso:true,deleted};
+  }finally{lock.releaseLock();}
+}
+
+
+/**
+ * As abas Checklist, Comentarios e Cronometros são fontes legíveis/editáveis no Sheets.
+ * IDs são preenchidos automaticamente para itens inseridos diretamente no Sheets.
+ */
+function listarDetalhesCards() {
+  const lock=trava_();
+  try{
+    preparar_();
+    const ss=planilha_(),data=new Map();
+    const entry=(q,id)=>{
+      const key=q+'::'+id;
+      if(!data.has(key))data.set(key,{quadroId:q,id,chk:[],comments:[],elapsedMs:0,runningSince:null});
+      return data.get(key);
+    };
+    const checks=ss.getSheetByName(CHECKLIST_ABA);
+    if(checks&&checks.getLastRow()>1){
+      const rows=checks.getRange(2,1,checks.getLastRow()-1,6).getValues();
+      rows.forEach((r,i)=>{
+        const q=String(r[0]||''),id=String(r[1]||''),txt=String(r[3]||'');
+        if(!q||!id||!txt)return;
+        const itemId=String(r[2]||'')||Utilities.getUuid();
+        if(!r[2])checks.getRange(i+2,3).setValue(itemId);
+        entry(q,id).chk.push({id:itemId,t:txt,d:r[4]===true||String(r[4]).toLowerCase()==='true'||Number(r[4])===1,ordem:Number(r[5])||i+1});
+      });
+    }
+    const comments=ss.getSheetByName(COMENTARIOS_ABA);
+    if(comments&&comments.getLastRow()>1){
+      const rows=comments.getRange(2,1,comments.getLastRow()-1,6).getValues();
+      rows.forEach((r,i)=>{
+        const q=String(r[0]||''),id=String(r[1]||''),txt=String(r[5]||'');
+        if(!q||!id||!txt)return;
+        const itemId=String(r[2]||'')||Utilities.getUuid();
+        if(!r[2])comments.getRange(i+2,3).setValue(itemId);
+        entry(q,id).comments.push({id:itemId,author:String(r[3]||''),at:String(r[4]||''),text:txt});
+      });
+    }
+    const timers=ss.getSheetByName(CRONOMETROS_ABA);
+    if(timers&&timers.getLastRow()>1){
+      timers.getRange(2,1,timers.getLastRow()-1,4).getValues().forEach(r=>{
+        const q=String(r[0]||''),id=String(r[1]||'');
+        if(!q||!id)return;
+        const target=entry(q,id);
+        target.elapsedMs=Math.max(0,Number(r[2])||0);
+        target.runningSince=Number(r[3])||null;
+      });
+    }
+    return Array.from(data.values()).map(x=>({...x,chk:x.chk.sort((a,b)=>a.ordem-b.ordem).map(({ordem,...r})=>r)}));
+  }finally{lock.releaseLock();}
+}
+function limparDetalhes_(quadroId,cardId) {
+  const ss=planilha_();
+  [CHECKLIST_ABA,COMENTARIOS_ABA,CRONOMETROS_ABA].forEach(name=>{
+    const tab=ss.getSheetByName(name);
+    if(!tab||tab.getLastRow()<2)return;
+    const vals=tab.getRange(2,1,tab.getLastRow()-1,2).getValues();
+    for(let i=vals.length-1;i>=0;i--){
+      if(String(vals[i][0])===String(quadroId)&&(!cardId||String(vals[i][1])===String(cardId)))tab.deleteRow(i+2);
+    }
+  });
+}
+function salvarDetalhesCard(dados) {
+  const q=String(dados&&dados.quadroId||''),id=String(dados&&dados.id||'');
+  const checks=Array.isArray(dados&&dados.chk)?dados.chk:[];
+  const comments=Array.isArray(dados&&dados.comments)?dados.comments:[];
+  if(!q||!id||checks.length>300||comments.length>1000)throw new Error('Dados de card inválidos.');
+  if(checks.some(c=>String(c.t||'').length>2000)||comments.some(c=>String(c.text||'').length>6000))throw new Error('Texto demasiado longo.');
+  const lock=trava_();
+  try{
+    preparar_();
+    localizarCard_(id,q);
+    limparDetalhes_(q,id);
+    const ss=planilha_();
+    const tabChk=ss.getSheetByName(CHECKLIST_ABA);
+    checks.forEach((c,i)=>{if(String(c.t||'').trim())tabChk.appendRow([q,id,String(c.id||Utilities.getUuid()),String(c.t||''),!!c.d,i+1]);});
+    const tabCm=ss.getSheetByName(COMENTARIOS_ABA);
+    comments.forEach(c=>{if(String(c.text||'').trim())tabCm.appendRow([q,id,String(c.id||Utilities.getUuid()),String(c.author||''),String(c.at||''),String(c.text||'')]);});
+    const elapsed=Math.max(0,Number(dados.elapsedMs)||0),since=Number(dados.runningSince)||'';
+    if(elapsed||since)ss.getSheetByName(CRONOMETROS_ABA).appendRow([q,id,elapsed,since]);
+    return {sucesso:true};
+  }finally{lock.releaseLock();}
 }
