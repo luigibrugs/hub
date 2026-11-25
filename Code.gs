@@ -118,6 +118,19 @@ function iniciarEstrutura_() {
     });
     if(alterou)quadros.getRange(2,1,qtd,6).setValues(linhas);
   }
+  if(listas.getLastRow()>1){
+    const n=listas.getLastRow()-1,rows=listas.getRange(2,1,n,5).getValues();
+    let changed=false;
+    const firstBoard=quadros.getLastRow()>1?String(quadros.getRange(2,1).getValue()):'';
+    rows.forEach((row,i)=>{
+      if(!String(row[2]||'').trim())return;
+      if(!String(row[0]||'').trim()&&firstBoard){row[0]=firstBoard;changed=true;}
+      if(!String(row[1]||'').trim()){row[1]='lst-'+Utilities.getUuid();changed=true;}
+      if(!row[3]){row[3]='#00DBFF';changed=true;}
+      if(!row[4]){row[4]=i+1;changed=true;}
+    });
+    if(changed)listas.getRange(2,1,n,5).setValues(rows);
+  }
   bootstrap.setProperty(initialized,'sim');
   return {espacos,quadros};
 }
@@ -128,7 +141,7 @@ function obterQuadros_() {
     id:String(r[0]),espacoId:String(r[1]),nome:String(r[2]),
     cor:String(r[3]||'#00b6ce'),legado:String(r[4]||''),
     aba:String(r[5]||''),linha:i+2
-  }));
+  })).filter(q=>q.id&&q.nome);
 }
 function abaQuadro_(id) {
   const q=obterQuadros_().find(q=>q.id===String(id));
